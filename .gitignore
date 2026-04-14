@@ -1,0 +1,44 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.fritap-env/
+
+# Local Python/tooling state
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build / packaging
+build/
+dist/
+*.egg-info/
+
+# IDE / editor local config
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Project-local generated artifacts (do not upload)
+artifacts/
+
+# Optional local runtime/config secrets
+.env
+.env.*
+*.local
+
+artifacts/chrome/
