@@ -5,8 +5,9 @@
  * T5.2:
  *   Python 侧将配置 JSON 注入到 %HOOK_CONFIG% 占位符。
  *
- * T6.2 Phase 1:
- *   先保守集成 ssl_log_secret，只做调试观测，不直接产出 keylog 行。
+ * T6.2 Phase 2:
+ *   为 ssl_log_secret 单独走 client_random 路径，正式产出 keylog 行，
+ *   用于补齐复用场景下现有主链路未覆盖的密钥。
  */
 
 const CFG = %HOOK_CONFIG%;
@@ -69,6 +70,15 @@ function readSecretPreview(secretPtr, secretLen) {
     }
 }
 
+function isLikelyCR(buf) {
+    if (!buf) return false;
+    const u8 = new Uint8Array(buf);
+    if (u8.length !== 32) return false;
+    if (u8[0] === 0 && u8[1] === 0 && u8[2] === 0 && u8[3] === 0) return false;
+    if (new Set(u8).size < 16) return false;
+    return true;
+}
+
 /**
  * 读取 client_random（已验证路径）:
  *   s3 = *ssl_ptr → sub = *(s3 + 0x30) → cr = sub + 0x30 → 32字节
@@ -78,12 +88,22 @@ function readCR(ssl) {
         const s3 = ssl.readPointer();
         const sub = s3.add(0x30).readPointer();
         const buf = sub.add(0x30).readByteArray(32);
-        if (!buf) return null;
-        const u8 = new Uint8Array(buf);
-        if (u8[0] === 0 && u8[1] === 0 && u8[2] === 0 && u8[3] === 0)
-            return null;
-        if (new Set(u8).size < 16) return null;
-        return buf;
+        return isLikelyCR(buf) ? buf : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+/**
+ * ssl_log_secret 专用 client_random 路径（Phase 2 探针确认）:
+ *   p = *(ssl + 0x30) → cr = p + 0x30 → 32字节
+ */
+function readCRSslLog(ssl) {
+    try {
+        const p = ssl.add(0x30).readPointer();
+        if (p.isNull()) return null;
+        const buf = p.add(0x30).readByteArray(32);
+        return isLikelyCR(buf) ? buf : null;
     } catch (_) {
         return null;
     }
@@ -188,6 +208,40 @@ function readMsCalibrated(ssl) {
             return ssl.add(_msOff1).readPointer().add(_msOff2).readByteArray(48);
     } catch (_) {}
     return null;
+}
+
+function emitSslLogSecret(label, secretPtr, secretLen, ssl, fd) {
+    try {
+        if (!label || !secretPtr || ptr(secretPtr).isNull()) return false;
+        if (!(secretLen > 0 && secretLen <= 128)) return false;
+
+        const cr = readCRSslLog(ssl);
+        if (!cr) return false;
+
+        const secret = ptr(secretPtr).readByteArray(secretLen);
+        if (!secret) return false;
+
+        if (label === 'CLIENT_RANDOM') {
+            if (secretLen !== 48) return false;
+            emitKey('CLIENT_RANDOM ' + hex(cr) + ' ' + hex(secret), 'ssl_log', fd);
+            return true;
+        }
+
+        const tls13Labels = new Set([
+            'CLIENT_HANDSHAKE_TRAFFIC_SECRET',
+            'SERVER_HANDSHAKE_TRAFFIC_SECRET',
+            'CLIENT_TRAFFIC_SECRET_0',
+            'SERVER_TRAFFIC_SECRET_0',
+            'EXPORTER_SECRET',
+            'CLIENT_EARLY_TRAFFIC_SECRET'
+        ]);
+
+        if (!tls13Labels.has(label)) return false;
+        emitKey(label + ' ' + hex(cr) + ' ' + hex(secret), 'ssl_log', fd);
+        return true;
+    } catch (_) {
+        return false;
+    }
 }
 
 function installHooks(mod) {
@@ -307,20 +361,24 @@ function installHooks(mod) {
                     try {
                         const ssl = args[0];
                         const label = safeUtf8(args[1]);
+                        const secretPtr = args[2];
                         const secretLen = args[3].toInt32();
-                        const secretPreview = readSecretPreview(args[2], secretLen);
+                        const secretPreview = readSecretPreview(secretPtr, secretLen);
                         const fd = readFd(ssl);
-                        sslLogDbg(label, secretLen, fd, secretPreview, ssl);
+                        const emitted = emitSslLogSecret(label, secretPtr, secretLen, ssl, fd);
+                        if (!emitted) {
+                            sslLogDbg(label, secretLen, fd, secretPreview, ssl);
+                        }
                     } catch (_) {}
                 }
             });
             ssl_log_ok = true;
-            dbg('ssl_log_secret phase1 hook OK @ ' + mod.base.add(ptr(SSL_LOG_SECRET_RVA)));
+            dbg('ssl_log_secret phase2 hook OK @ ' + mod.base.add(ptr(SSL_LOG_SECRET_RVA)));
         } catch (e) {
-            dbg('ssl_log_secret phase1 fail: ' + e);
+            dbg('ssl_log_secret phase2 fail: ' + e);
         }
     } else {
-        dbg('ssl_log_secret phase1 skipped: no RVA in config');
+        dbg('ssl_log_secret phase2 skipped: no RVA in config');
     }
 
     send({ t: 'ready', prf: prf_ok, keyexp: keyexp_ok, hkdf: hkdf_ok, ssl_log: ssl_log_ok });
