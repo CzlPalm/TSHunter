@@ -57,3 +57,4 @@ BoringSecretHunter/binary/
 # Jupyter
 .ipynb_checkpoints/
 
+BoringSecretHunter/ghidra.zip
