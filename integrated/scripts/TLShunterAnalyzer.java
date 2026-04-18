@@ -23,7 +23,17 @@ import java.util.Set;
 
 public class TLShunterAnalyzer extends GhidraScript {
 
-    private static final String VERSION = "0.2.1-phase2";
+    private static final String VERSION = "0.3.0-hkdf-xval";
+
+    // TLS 1.3 标签：每个都被 BoringSSL 的核心 derive_secret 接收，
+    // 而各个 wrapper（derive_handshake_secrets / derive_app_secrets 等）只使用其中 1~2 个。
+    // 四标签 XREF 函数集合的交集将唯一指向核心 derive_secret。
+    private static final List<String> HKDF_TLS13_LABELS = List.of(
+        "c hs traffic",
+        "s hs traffic",
+        "c ap traffic",
+        "s ap traffic"
+    );
 
     private static class FunctionRef {
         Function function;
@@ -58,7 +68,7 @@ public class TLShunterAnalyzer extends GhidraScript {
         println("TLShunter integrated analyzer v" + VERSION);
         println("[*] Binary: " + currentProgram.getName());
 
-        analyzeKdfLike("HKDF", "s hs traffic");
+        identifyHKDF();
         analyzeSslLogSecret();
         identifyPRF();
         identifyKeyExpansion();
@@ -66,28 +76,53 @@ public class TLShunterAnalyzer extends GhidraScript {
         println("[*] Analysis finished.");
     }
 
-    private void analyzeKdfLike(String type, String needle) {
-        List<FunctionRef> refs = findFunctionsUsingString(needle);
-        if (refs.isEmpty()) {
-            Address rodataAddress = findStringInReadonlyData(needle);
-            if (rodataAddress != null) {
-                refs = collectReferencingFunctions(rodataAddress);
+    private void identifyHKDF() {
+        println("[*] HKDF: 开始识别...");
+
+        Map<String, Set<Function>> funcsPerLabel = new LinkedHashMap<>();
+        for (String label : HKDF_TLS13_LABELS) {
+            Set<Function> funcs = new LinkedHashSet<>();
+            List<Address> addrs = findAllStringsInReadonlyData(label);
+            for (Address addr : addrs) {
+                funcs.addAll(getReferencingFunctions(addr));
+            }
+            funcsPerLabel.put(label, funcs);
+            println("[*] HKDF: 标签 \"" + label + "\" XREF 函数数 = " + funcs.size());
+        }
+
+        Set<Function> fourWay = null;
+        for (Set<Function> s : funcsPerLabel.values()) {
+            if (fourWay == null) {
+                fourWay = new LinkedHashSet<>(s);
+            } else {
+                fourWay.retainAll(s);
             }
         }
-
-        if (refs.isEmpty()) {
-            println("[WARN] type=" + type + " status=not_found string=" + needle);
+        Function hkdfFunc = pickBestFunctionByXrefs(fourWay != null ? fourWay : new LinkedHashSet<Function>());
+        if (hkdfFunc != null) {
+            println("[*] HKDF: 四标签交叉验证命中 → " + hkdfFunc.getName());
+            emitResult("HKDF", hkdfFunc, "TLS 1.3 Derive-Secret (cross-validated)");
             return;
         }
 
-        FunctionRef selected = refs.get(0);
-        Function target = selected.function;
-        if (target == null) {
-            println("[WARN] type=" + type + " status=no_function string=" + needle);
+        Set<Function> hsOnly = new LinkedHashSet<>(funcsPerLabel.get("c hs traffic"));
+        hsOnly.retainAll(funcsPerLabel.get("s hs traffic"));
+        hkdfFunc = pickBestFunctionByXrefs(hsOnly);
+        if (hkdfFunc != null) {
+            println("[*] HKDF: 握手标签二重交集命中 → " + hkdfFunc.getName());
+            emitResult("HKDF", hkdfFunc, "TLS 1.3 Derive-Secret (handshake-label intersection)");
             return;
         }
 
-        emitResult(type, target, null);
+        Set<Function> sHsOnly = funcsPerLabel.get("s hs traffic");
+        hkdfFunc = pickBestFunctionByXrefs(sHsOnly);
+        if (hkdfFunc != null) {
+            println("[*] HKDF: 单标签入度最大回退 → " + hkdfFunc.getName());
+            emitResult("HKDF", hkdfFunc, "TLS 1.3 Derive-Secret (fallback, may need verification)");
+            return;
+        }
+
+        println("[-] HKDF: 所有策略均未命中");
     }
 
     private void analyzeSslLogSecret() {
