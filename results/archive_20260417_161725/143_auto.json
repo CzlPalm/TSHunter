@@ -1,0 +1,8 @@
+{
+  "meta": {
+    "binary": "chrome",
+    "analysis_tool": "TLShunter phase2",
+    "analysis_date": "2026-04-17T03:15:57.589832+00:00"
+  },
+  "hook_points": {}
+}

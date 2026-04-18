@@ -1,0 +1,42 @@
+============================================================
+[*] TLShunter Chrome analysis started
+[*] Start time      : 2026-04-16 16:54:37 +0800
+[*] Host            : palm-Dell-Pro-Tower-QCT1250
+[*] Root dir        : /home/palm/TLSHunter
+[*] Binary          : /home/palm/TLSHunter/TLSKeyHunter/binary/chrome
+[*] Image tag       : tlshunter-integrated:phase2
+[*] Log file        : /home/palm/TLSHunter/results/chrome_analysis_20260416_165437.log
+[*] JSON output     : /home/palm/TLSHunter/results/143_auto.json
+[*] Worker PID      : 996650
+============================================================
+[*] Docker image already exists, skipping build.
+[*] Starting Docker analysis...
+[*] Analyzing chrome
+Picked up JAVA_TOOL_OPTIONS: -Dlog4j.configurationFile=/usr/local/src/custom_log4j.xml
+Picked up JAVA_TOOL_OPTIONS: -Dlog4j.configurationFile=/usr/local/src/custom_log4j.xml
+Picked up JAVA_TOOL_OPTIONS: -Dlog4j.configurationFile=/usr/local/src/custom_log4j.xml
+openjdk version "21.0.10" 2026-01-20 LTS
+OpenJDK Runtime Environment Temurin-21.0.10+7 (build 21.0.10+7-LTS)
+OpenJDK 64-Bit Server VM Temurin-21.0.10+7 (build 21.0.10+7-LTS, mixed mode)
+Invalid PNG data at 01865518
+Invalid GIF data at 01c38146
+Invalid GIF data at 01c38154
+Invalid PNG data at 01e6a702
+Invalid PNG data at 02219740
+Invalid GIF data at 0248c32c
+Invalid GIF data at 0248c333
+Invalid PNG data at 0511d671
+Invalid PNG data at 0ae1ec93
+Invalid PNG data at 0ae2003f
+Invalid PNG data at 0ae2bacb
+Invalid PNG data at 0e9a16e7
+[*] Docker run finished with exit code 137
+[*] Parsing [RESULT] lines into JSON...
+[*] JSON written to /home/palm/TLSHunter/results/143_auto.json
+[*] Parsed hook points: (none)
+============================================================
+[*] End time        : 2026-04-16 16:57:51 +0800
+[*] Total duration  : 193 seconds
+[*] Final exit code : 137
+============================================================
+
