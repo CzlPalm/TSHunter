@@ -33,3 +33,4 @@ export _JAVA_OPTIONS="-Xmx16G"
     -prescript MinimalAnalysisOption.java \
     -postScript TLShunterAnalyzer.java \
     -maxMem 16G | tee /host_output/analysis.log
+

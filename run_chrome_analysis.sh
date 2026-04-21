@@ -4,8 +4,8 @@ set -euo pipefail
 ROOT_DIR="/home/palm/TLSHunter"
 RESULTS_DIR="${ROOT_DIR}/results"
 BINARY_PATH="${ROOT_DIR}/TLSKeyHunter/binary/chrome"
-IMAGE_TAG="tlshunter-integrated:phase2"
-DOCKERFILE_PATH="${ROOT_DIR}/integrated/Dockerfile"
+IMAGE_TAG="tlshunter:0.5.0"
+DOCKERFILE_PATH="${ROOT_DIR}/Dockerfile"
 JSON_OUT="${RESULTS_DIR}/143_auto.json"
 
 mkdir -p "${RESULTS_DIR}"
@@ -67,7 +67,6 @@ if [[ "${1:-}" == "--worker" ]]; then
     echo "[*] Parsing [RESULT] lines into JSON..."
     python3 - "${LOG_FILE}" "${JSON_OUT}" <<'PY'
 import json
-import os
 import re
 import sys
 from datetime import datetime, timezone

@@ -3,7 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="/home/palm/TLSHunter"
 RESULTS_DIR="${ROOT_DIR}/results"
-IMAGE_TAG="tlshunter-integrated:phase2"
+IMAGE_TAG="tlshunter:0.5.0"
 
 pick_log() {
     local latest=""
@@ -62,7 +62,7 @@ while true; do
 
     if [[ -f "${RESULTS_DIR}/ANALYSIS_DONE" ]]; then
         echo "=== ANALYSIS_DONE ==="
-        cat "${RESULTS_DIR}/ANALYSIS_DONE"
+        sed -n '1,20p' "${RESULTS_DIR}/ANALYSIS_DONE"
         echo
     fi
 

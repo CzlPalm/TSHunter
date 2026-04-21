@@ -23,7 +23,7 @@ import java.util.Set;
 
 public class TLShunterAnalyzer extends GhidraScript {
 
-    private static final String VERSION = "0.4.0-hkdf-nextcall";
+    private static final String VERSION = "0.5.0-fp-canonical";
 
     // TLS 1.3 标签：BoringSSL 的 wrapper（derive_handshake_secrets / derive_application_secrets）
     // 通过 LEA 载入标签地址后紧接着 CALL 核心 derive_secret。
@@ -518,30 +518,47 @@ public class TLShunterAnalyzer extends GhidraScript {
         return builder.toString();
     }
 
+    /**
+     * Canonical fingerprint length policy — 1:1 mirror of
+     * ExtractKDFFingerprint.java (the manual ground-truth tool).
+     */
     private int getLengthUntilStop(Function function) {
-        Listing listing = currentProgram.getListing();
-        InstructionIterator instructions = listing.getInstructions(function.getBody(), true);
-        int length = 0;
-        boolean foundStop = false;
+        final int MIN_FP = 32;
+        final int MAX_CAP = 256;
+        final int DEFAULT_ON_ERROR = 32;
 
-        while (instructions.hasNext()) {
-            Instruction instruction = instructions.next();
+        Listing listing = currentProgram.getListing();
+        Address entry = function.getEntryPoint();
+        Instruction instruction = listing.getInstructionAt(entry);
+        if (instruction == null) {
+            return DEFAULT_ON_ERROR;
+        }
+
+        int length = 0;
+        while (instruction != null && function.getBody().contains(instruction.getAddress())) {
             length += instruction.getLength();
 
-            if (instruction.getFlowType().isJump() || instruction.getFlowType().isConditional() || instruction.getFlowType().isCall()) {
-                Address[] flows = instruction.getFlows();
-                if (flows != null && flows.length > 0 && function.getBody().contains(flows[0])) {
-                    continue;
-                }
-                foundStop = true;
-                break;
+            String mnemonic = instruction.getMnemonicString().toUpperCase();
+            boolean isJmpUncond = mnemonic.equals("JMP");
+            boolean isBranchLike = mnemonic.startsWith("J")
+                || mnemonic.equals("RET")
+                || mnemonic.equals("RETN")
+                || mnemonic.equals("RETF");
+
+            if (isJmpUncond) {
+                return Math.min(length, MAX_CAP);
             }
+            if (isBranchLike && length >= MIN_FP) {
+                return Math.min(length, MAX_CAP);
+            }
+            if (length >= MAX_CAP) {
+                return MAX_CAP;
+            }
+
+            instruction = instruction.getNext();
         }
 
-        if (!foundStop) {
-            return Math.min(length, 64);
-        }
-        return length;
+        return length > 0 ? Math.min(length, MAX_CAP) : DEFAULT_ON_ERROR;
     }
 
     private int countXrefsTo(Function function) {
@@ -585,3 +602,4 @@ public class TLShunterAnalyzer extends GhidraScript {
         return String.format("0x%08X", rva);
     }
 }
+

@@ -8,7 +8,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-IMAGE_TAG = "tlshunter-integrated:phase2"
+IMAGE_TAG = "tlshunter:0.5.0"
 RESULT_RE = re.compile(r"\[RESULT\]\s+type=(\S+)\s+function=(\S+)\s+rva=(\S+)\s+fingerprint=(.+?)(?:\s+note=(\S+))?$")
 
 ROLE_MAP = {
@@ -35,7 +35,7 @@ def ensure_image(project_root: Path):
     if inspect.returncode == 0:
         return
 
-    result = run(["docker", "build", "-t", IMAGE_TAG, "-f", str(project_root / "integrated" / "Dockerfile"), "."], cwd=project_root)
+    result = run(["docker", "build", "-t", IMAGE_TAG, "-f", str(project_root / "Dockerfile"), "."], cwd=project_root)
     if result.returncode != 0:
         raise RuntimeError(f"Docker build failed:\n{result.stdout}\n{result.stderr}")
 
@@ -47,7 +47,6 @@ def _normalize_result_line(line: str) -> str:
     if idx == -1:
         return stripped
     return stripped[idx:]
-
 
 
 def parse_results(output: str):
@@ -70,7 +69,6 @@ def parse_results(output: str):
     return parsed
 
 
-
 def build_output_json(binary: Path, parsed_results: dict):
     hook_points = {}
     for result_type, key in JSON_KEY_MAP.items():
@@ -87,14 +85,12 @@ def build_output_json(binary: Path, parsed_results: dict):
     }
 
 
-
 def _docker_output_text(result: subprocess.CompletedProcess) -> str:
     return (result.stdout or "") + (result.stderr or "")
 
 
-
 def analyze_binary(binary: Path, output: Path):
-    project_root = Path(__file__).resolve().parents[1]
+    project_root = Path(__file__).resolve().parent
     ensure_image(project_root)
 
     with tempfile.TemporaryDirectory(prefix="tlshunter-input-") as input_dir_str:
@@ -124,15 +120,12 @@ def analyze_binary(binary: Path, output: Path):
     return parsed, output
 
 
-
 def load_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-
 def fingerprint_prefix(value: str, prefix_bytes: int = 20) -> str:
     return " ".join(value.split()[:prefix_bytes])
-
 
 
 def compare_results(result_path: Path, ground_truth_path: Path):
@@ -172,7 +165,6 @@ def compare_results(result_path: Path, ground_truth_path: Path):
     return passed, "\n".join(summary)
 
 
-
 def render_report(results_dir: Path):
     json_files = sorted(
         [path for path in results_dir.glob("*.json") if path.is_file()],
@@ -210,7 +202,6 @@ def render_report(results_dir: Path):
     return "\n".join(header + rows) + "\n"
 
 
-
 def analyze_batch(batch_dir: Path, output_dir: Path):
     candidates = sorted([path for path in batch_dir.iterdir() if path.is_file()])
     if not candidates:
@@ -225,9 +216,8 @@ def analyze_batch(batch_dir: Path, output_dir: Path):
     return summaries
 
 
-
 def main():
-    parser = argparse.ArgumentParser(description="Run TLShunter integrated analyzer")
+    parser = argparse.ArgumentParser(description="Run TLShunter analyzer")
     parser.add_argument("--binary", help="Path to target binary")
     parser.add_argument("--output", help="Path to output JSON file")
     parser.add_argument("--batch", help="Analyze all binaries in a directory")
@@ -260,44 +250,35 @@ def main():
         return
 
     if args.batch:
+        if not args.batch_output_dir:
+            raise SystemExit("--batch-output-dir is required with --batch")
         batch_dir = Path(args.batch).resolve()
-        if not batch_dir.is_dir():
-            raise SystemExit(f"Batch directory not found: {batch_dir}")
-        output_dir = Path(args.batch_output_dir).resolve() if args.batch_output_dir else (batch_dir / "results")
+        output_dir = Path(args.batch_output_dir).resolve()
         summaries = analyze_batch(batch_dir, output_dir)
-        print(f"[*] Batch finished: {len(summaries)} binaries")
         for binary, output_path, parsed in summaries:
-            print(f"[OK] {binary.name} -> {output_path} ({len(parsed)} hook types)")
+            print(f"[*] {binary.name} -> {output_path}")
+            print(f"    hooks: {', '.join(parsed.keys()) if parsed else '(none)'}")
         return
 
     if args.compare:
         if not args.output:
-            raise SystemExit("--output must point to an existing result JSON when using --compare without --binary")
-        result_path = Path(args.output).resolve()
-        ground_truth_path = Path(args.compare).resolve()
-        if not result_path.is_file():
-            raise SystemExit(f"Result JSON not found: {result_path}")
-        if not ground_truth_path.is_file():
-            raise SystemExit(f"Ground truth JSON not found: {ground_truth_path}")
-        passed, text = compare_results(result_path, ground_truth_path)
+            raise SystemExit("--output must point to the result JSON when using --compare standalone")
+        passed, text = compare_results(Path(args.output).resolve(), Path(args.compare).resolve())
         print(text)
         raise SystemExit(0 if passed else 1)
 
     if args.report:
-        results_dir = Path(args.report).resolve()
-        if not results_dir.is_dir():
-            raise SystemExit(f"Results directory not found: {results_dir}")
-        report_text = render_report(results_dir)
+        report = render_report(Path(args.report).resolve())
         if args.report_out:
-            report_path = Path(args.report_out).resolve()
-            report_path.write_text(report_text, encoding="utf-8")
-            print(f"[*] Wrote report to {report_path}")
+            Path(args.report_out).resolve().write_text(report, encoding="utf-8")
+            print(f"[*] Report written to {Path(args.report_out).resolve()}")
         else:
-            print(report_text, end="")
+            print(report, end="")
         return
 
-    raise SystemExit("Specify one of: --binary, --batch, --compare, --report")
+    parser.print_help()
 
 
 if __name__ == "__main__":
     main()
+

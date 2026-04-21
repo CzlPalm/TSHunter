@@ -25,7 +25,8 @@ dist/
 *.log
 *.pid
 *.out
-results/
+results/*
+!results/.gitkeep
 smoke_test/results/
 **/analysis.log
 **/ANALYSIS_DONE
@@ -58,6 +59,4 @@ BoringSecretHunter/binary/
 .ipynb_checkpoints/
 
 BoringSecretHunter/ghidra.zip
-
-
 
