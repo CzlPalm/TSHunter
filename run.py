@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import hashlib
 import json
 import re
 import shutil
@@ -8,8 +9,12 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-IMAGE_TAG = "tlshunter:0.5.0"
+DEFAULT_IMAGE_TAG = "tlshunter:0.5.0"
+ANALYZER_VERSION = "0.6.0-modular"
+ANALYSIS_TOOL = "TLShunter v0.6.0"
 RESULT_RE = re.compile(r"\[RESULT\]\s+type=(\S+)\s+function=(\S+)\s+rva=(\S+)\s+fingerprint=(.+?)(?:\s+note=(\S+))?$")
+IMAGE_BASE_RE = re.compile(r"image base[:=]\s*(0x[0-9a-fA-F]+)", re.IGNORECASE)
+DETECT_RE = re.compile(r"\[DETECT\]\s+stack=(\S+)\s+confidence=([0-9]*\.?[0-9]+)")
 
 ROLE_MAP = {
     "HKDF": "TLS 1.3 Derive-Secret",
@@ -30,14 +35,25 @@ def run(cmd, cwd=None):
     return subprocess.run(cmd, cwd=cwd, text=True, capture_output=True)
 
 
-def ensure_image(project_root: Path):
-    inspect = run(["docker", "image", "inspect", IMAGE_TAG])
+def ensure_image(project_root: Path, image_tag: str, rebuild: bool = False):
+    if rebuild:
+        run(["docker", "rmi", image_tag])
+
+    inspect = run(["docker", "image", "inspect", image_tag])
     if inspect.returncode == 0:
         return
 
-    result = run(["docker", "build", "-t", IMAGE_TAG, "-f", str(project_root / "Dockerfile"), "."], cwd=project_root)
+    result = run(["docker", "build", "-t", image_tag, "-f", str(project_root / "Dockerfile"), "."], cwd=project_root)
     if result.returncode != 0:
         raise RuntimeError(f"Docker build failed:\n{result.stdout}\n{result.stderr}")
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _normalize_result_line(line: str) -> str:
@@ -69,7 +85,35 @@ def parse_results(output: str):
     return parsed
 
 
-def build_output_json(binary: Path, parsed_results: dict):
+def detect_image_base(output: str):
+    for line in output.splitlines():
+        match = IMAGE_BASE_RE.search(line)
+        if match:
+            return match.group(1)
+    return None
+
+
+def parse_detector(output: str):
+    for line in output.splitlines():
+        match = DETECT_RE.search(line.strip())
+        if match:
+            return {"tls_lib_detected": match.group(1), "tls_lib_confidence": float(match.group(2))}
+    return {"tls_lib_detected": None, "tls_lib_confidence": None}
+
+
+def resolve_tls_metadata(metadata: dict, detected: dict):
+    resolved = dict(metadata)
+    resolved["tls_lib_detected"] = detected.get("tls_lib_detected")
+    resolved["tls_lib_confidence"] = detected.get("tls_lib_confidence")
+    cli_tls_lib = resolved.get("tls_lib")
+    if cli_tls_lib and detected.get("tls_lib_detected") and cli_tls_lib != detected.get("tls_lib_detected"):
+        print(f"[WARN] CLI tls-lib override: cli={cli_tls_lib} detected={detected['tls_lib_detected']}")
+    if not cli_tls_lib:
+        resolved["tls_lib"] = detected.get("tls_lib_detected")
+    return resolved
+
+
+def build_output_json(binary: Path, parsed_results: dict, metadata: dict, image_base: str | None):
     hook_points = {}
     for result_type, key in JSON_KEY_MAP.items():
         if result_type in parsed_results:
@@ -78,8 +122,19 @@ def build_output_json(binary: Path, parsed_results: dict):
     return {
         "meta": {
             "binary": binary.name,
-            "analysis_tool": "TLShunter phase2",
+            "binary_sha256": sha256_file(binary),
+            "binary_size": binary.stat().st_size,
+            "browser": metadata.get("browser"),
+            "version": metadata.get("version"),
+            "platform": metadata.get("platform"),
+            "arch": metadata.get("arch"),
+            "tls_lib": metadata.get("tls_lib"),
+            "tls_lib_detected": metadata.get("tls_lib_detected"),
+            "tls_lib_confidence": metadata.get("tls_lib_confidence"),
+            "analysis_tool": ANALYSIS_TOOL,
             "analysis_date": datetime.now(timezone.utc).isoformat(),
+            "analyzer_version": ANALYZER_VERSION,
+            "image_base": image_base,
         },
         "hook_points": hook_points,
     }
@@ -89,9 +144,9 @@ def _docker_output_text(result: subprocess.CompletedProcess) -> str:
     return (result.stdout or "") + (result.stderr or "")
 
 
-def analyze_binary(binary: Path, output: Path):
+def analyze_binary(binary: Path, output: Path, metadata: dict, image_tag: str, rebuild: bool = False):
     project_root = Path(__file__).resolve().parent
-    ensure_image(project_root)
+    ensure_image(project_root, image_tag, rebuild=rebuild)
 
     with tempfile.TemporaryDirectory(prefix="tlshunter-input-") as input_dir_str:
         input_dir = Path(input_dir_str)
@@ -104,9 +159,10 @@ def analyze_binary(binary: Path, output: Path):
         docker_cmd = [
             "docker", "run", "--rm",
             "--name", f"tlshunter_{binary.stem}_{datetime.now().strftime('%Y%m%d_%H%M%S')}",
+            "-e", f"SELECT_BINARY={binary.name}",
             "-v", f"{input_dir}:/usr/local/src/binaries",
             "-v", f"{output_dir}:/host_output",
-            IMAGE_TAG,
+            image_tag,
         ]
         result = run(docker_cmd)
         combined_output = _docker_output_text(result)
@@ -115,7 +171,10 @@ def analyze_binary(binary: Path, output: Path):
             raise RuntimeError(f"Docker run failed with exit code {result.returncode}:\n{combined_output}")
 
     parsed = parse_results(combined_output)
-    data = build_output_json(binary, parsed)
+    image_base = detect_image_base(combined_output)
+    detected = parse_detector(combined_output)
+    resolved_metadata = resolve_tls_metadata(metadata, detected)
+    data = build_output_json(binary, parsed, resolved_metadata, image_base)
     output.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     return parsed, output
 
@@ -202,18 +261,32 @@ def render_report(results_dir: Path):
     return "\n".join(header + rows) + "\n"
 
 
-def analyze_batch(batch_dir: Path, output_dir: Path):
+def analyze_batch(batch_dir: Path, output_dir: Path, metadata: dict, image_tag: str, rebuild: bool = False):
     candidates = sorted([path for path in batch_dir.iterdir() if path.is_file()])
     if not candidates:
         raise RuntimeError(f"No binaries found in {batch_dir}")
 
     output_dir.mkdir(parents=True, exist_ok=True)
     summaries = []
+    first = True
     for binary in candidates:
         output_path = output_dir / f"{binary.name}.json"
-        parsed, _ = analyze_binary(binary, output_path)
+        parsed, _ = analyze_binary(binary, output_path, metadata, image_tag, rebuild=rebuild and first)
         summaries.append((binary, output_path, parsed))
+        first = False
     return summaries
+
+
+def parse_metadata_args(args):
+    return {
+        "browser": args.browser.strip() if args.browser else None,
+        "version": args.version.strip() if args.version else None,
+        "platform": args.platform.strip() if args.platform else None,
+        "arch": args.arch.strip() if args.arch else None,
+        "tls_lib": args.tls_lib.strip() if args.tls_lib else None,
+        "tls_lib_detected": None,
+        "tls_lib_confidence": None,
+    }
 
 
 def main():
@@ -225,7 +298,15 @@ def main():
     parser.add_argument("--compare", help="Compare a result JSON against a ground truth JSON file")
     parser.add_argument("--report", help="Generate a Markdown fingerprint stability report for a results directory")
     parser.add_argument("--report-out", help="Path to write the generated Markdown report")
+    parser.add_argument("--browser", help="Browser name")
+    parser.add_argument("--version", help="Version string")
+    parser.add_argument("--platform", help="linux/windows/macos/android")
+    parser.add_argument("--arch", help="x86_64/aarch64/armv7")
+    parser.add_argument("--tls-lib", help="Expected TLS library")
+    parser.add_argument("--image", default=DEFAULT_IMAGE_TAG, help="Docker image tag")
+    parser.add_argument("--rebuild", action="store_true", help="Force rebuild docker image before running")
     args = parser.parse_args()
+    metadata = parse_metadata_args(args)
 
     if args.binary:
         if not args.output:
@@ -235,7 +316,7 @@ def main():
         if not binary.is_file():
             raise SystemExit(f"Binary not found: {binary}")
 
-        parsed, output_path = analyze_binary(binary, output)
+        parsed, output_path = analyze_binary(binary, output, metadata, args.image, rebuild=args.rebuild)
         print(f"[*] Wrote analysis JSON to {output_path}")
         if parsed:
             for result_type, values in parsed.items():
@@ -254,7 +335,7 @@ def main():
             raise SystemExit("--batch-output-dir is required with --batch")
         batch_dir = Path(args.batch).resolve()
         output_dir = Path(args.batch_output_dir).resolve()
-        summaries = analyze_batch(batch_dir, output_dir)
+        summaries = analyze_batch(batch_dir, output_dir, metadata, args.image, rebuild=args.rebuild)
         for binary, output_path, parsed in summaries:
             print(f"[*] {binary.name} -> {output_path}")
             print(f"    hooks: {', '.join(parsed.keys()) if parsed else '(none)'}")
@@ -281,4 +362,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-

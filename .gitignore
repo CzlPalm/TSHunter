@@ -36,9 +36,12 @@ archive_*/
 *.tmp
 *.bak
 
+# Local binary staging
+binaries/*
+!binaries/.gitkeep
+
 # Large input binaries and generated samples
 TLSKeyHunter/binary/
-BoringSecretHunter/binary/
 *.bin
 *.apk
 *.ipa
@@ -57,6 +60,3 @@ BoringSecretHunter/binary/
 
 # Jupyter
 .ipynb_checkpoints/
-
-BoringSecretHunter/ghidra.zip
-

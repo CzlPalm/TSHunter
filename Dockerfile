@@ -18,7 +18,7 @@ ENV JAVA_TOOL_OPTIONS="-Dlog4j.configurationFile=/usr/local/src/custom_log4j.xml
 RUN cd /opt/ghidra_12.0.3_PUBLIC/support/gradle && gradle buildNatives
 
 WORKDIR /usr/local/src
-COPY scripts/TLShunterAnalyzer.java /usr/local/src/TLShunterAnalyzer.java
+COPY scripts/ /usr/local/src/
 COPY MinimalAnalysisOption.java /usr/local/src/MinimalAnalysisOption.java
 COPY custom_log4j.xml /usr/local/src/custom_log4j.xml
 COPY ghidra_analysis.sh /usr/local/src/ghidra_analysis.sh
@@ -28,4 +28,3 @@ RUN chmod +x /usr/local/src/ghidra_analysis.sh
 CMD ["/usr/local/src/ghidra_analysis.sh"]
 VOLUME /usr/local/src/binaries
 VOLUME /host_output
-
