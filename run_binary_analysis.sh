@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 usage() {
     cat <<EOF
 Usage: $0 <binary_path> <output_json> [options]
@@ -65,7 +67,7 @@ parse_meta() {
 META_ARGS=()
 parse_meta "$META"
 
-RUN_ARGS=(python3 "/home/palm/TLSHunter/run.py" --binary "$BINARY" --output "$OUTPUT_JSON" --image "$IMAGE_TAG")
+RUN_ARGS=(python3 "${SCRIPT_DIR}/run.py" --binary "$BINARY" --output "$OUTPUT_JSON" --image "$IMAGE_TAG")
 RUN_ARGS+=("${META_ARGS[@]}")
 
 if [[ $REBUILD -eq 1 ]]; then

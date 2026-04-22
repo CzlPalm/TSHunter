@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="/home/palm/TLSHunter"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${SCRIPT_DIR}"
 BINARY_PATH="${ROOT_DIR}/TLSKeyHunter/binary/chrome"
 OUTPUT_JSON="${ROOT_DIR}/results/143_auto.json"
 
