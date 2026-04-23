@@ -1,0 +1,19 @@
+{
+  "meta": {
+    "binary": "chrome",
+    "binary_sha256": "5972d607306cab843d8e25f738d38cec45165fa4516142a13114bca623125f8a",
+    "binary_size": 261831896,
+    "browser": "chrome",
+    "version": "143.0.7499.169",
+    "platform": "linux",
+    "arch": "x86_64",
+    "tls_lib": "boringssl",
+    "tls_lib_detected": "boringssl",
+    "tls_lib_confidence": 0.99,
+    "analysis_tool": "TLShunter v0.6.0",
+    "analysis_date": "2026-04-23T00:42:58.970946+00:00",
+    "analyzer_version": "0.6.0-modular",
+    "image_base": null
+  },
+  "hook_points": {}
+}

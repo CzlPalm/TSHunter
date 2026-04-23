@@ -1,0 +1,32 @@
+{
+  "hook_points": [
+    {
+      "kind": "hkdf",
+      "function": "boringssl_tls13_derive_secret",
+      "rva": "0x048837E0",
+      "fingerprint": "55 48 89 E5 41 57 41 56 41 55 41 54 53 48 81 EC 98 00 00 00 4C 89 45 88 49 89 CC 49 89 D7 48 89 F3 49 89 FE 64 48 8B 04 25 28 00 00 00 48 89 45 D0 0F 57 C0 4C 8D 6D 90 41 0F 29 45 30 41 0F 29 45 20 41 0F 29 45 10 41 0F 29 45 00 48 8D 55 80 48 C7 02 00 00 00 00 4C 89 FF 4C 89 EE E8 6E DB A5 FF 84 C0 0F 84 C9 00 00 00",
+      "fingerprint_len": 106
+    },
+    {
+      "kind": "key_expansion",
+      "function": "boringssl_tls1_key_expansion",
+      "rva": "0x0A22D130",
+      "fingerprint": "55 48 89 E5 41 57 41 56 41 55 41 54 53 48 83 EC 58 4C 89 4D C0 4C 89 45 A8 49 89 CD 49 89 D4 41 89 F7 48 89 FB 45 31 F6 48 8D 75 B8 4C 89 36 48 8D 55 C8 4C 89 32 48 8D 4D D0 4C 89 31 4D 8B 85 C8 00 00 00 E8 37 02 00 00 84 C0 0F 84 CB 00 00 00",
+      "fingerprint_len": 81
+    },
+    {
+      "kind": "prf",
+      "function": "boringssl_tls1_prf",
+      "rva": "0x0A22D4B0",
+      "fingerprint": "55 48 89 E5 41 57 41 56 41 55 41 54 53 48 83 EC 58 64 48 8B 04 25 28 00 00 00 48 89 45 D0 48 83 FA 30 0F 85 1A 01 00 00",
+      "fingerprint_len": 40
+    },
+    {
+      "kind": "ssl_log_secret",
+      "function": "ssl_log_secret",
+      "rva": "0x04883520",
+      "fingerprint": "55 48 89 E5 41 57 41 56 41 55 41 54 53 48 83 EC 48 48 8B 47 68 41 B4 01 48 83 B8 40 02 00 00 00 75 12",
+      "fingerprint_len": 34
+    }
+  ]
+}
