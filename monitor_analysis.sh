@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="/home/palm/TLSHunter"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${SCRIPT_DIR}"
 RESULTS_DIR="${ROOT_DIR}/results"
 IMAGE_TAG="tlshunter:0.5.0"
 
 pick_log() {
     local latest=""
     latest="$(ls -1t "${RESULTS_DIR}"/chrome_analysis_*.log 2>/dev/null | head -n1 || true)"
+    if [[ -n "${latest}" ]]; then
+        echo "${latest}"
+        return
+    fi
+    latest="$(ls -1t "${RESULTS_DIR}"/*.log 2>/dev/null | head -n1 || true)"
     if [[ -n "${latest}" ]]; then
         echo "${latest}"
         return
@@ -60,7 +66,12 @@ while true; do
     fi
     echo
 
-    if [[ -f "${RESULTS_DIR}/ANALYSIS_DONE" ]]; then
+    DONE_FILE="$(ls -1t "${RESULTS_DIR}"/*.done 2>/dev/null | head -n1 || true)"
+    if [[ -n "${DONE_FILE}" && -f "${DONE_FILE}" ]]; then
+        echo "=== Latest DONE file ==="
+        sed -n '1,20p' "${DONE_FILE}"
+        echo
+    elif [[ -f "${RESULTS_DIR}/ANALYSIS_DONE" ]]; then
         echo "=== ANALYSIS_DONE ==="
         sed -n '1,20p' "${RESULTS_DIR}/ANALYSIS_DONE"
         echo

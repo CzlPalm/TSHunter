@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = ROOT / "data" / "fingerprints.db"
 DEFAULT_SCHEMA = ROOT / "tools" / "schema.sql"
+MIGRATIONS_DIR = ROOT / "tools" / "migrations"
 
 
 def connect_db(db_path: Path) -> sqlite3.Connection:
@@ -15,8 +16,56 @@ def connect_db(db_path: Path) -> sqlite3.Connection:
     return conn
 
 
+def ensure_migrations_table(conn):
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            version TEXT PRIMARY KEY,
+            applied_at TEXT NOT NULL
+        )
+        """
+    )
+
+
+def column_exists(conn, table: str, column: str) -> bool:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    return any(row[1] == column for row in rows)
+
+
+def ensure_relocate_columns(conn):
+    additions = [
+        ("derived_from_version_id", "ALTER TABLE hook_points ADD COLUMN derived_from_version_id INTEGER REFERENCES versions(id)"),
+        ("rva_delta", "ALTER TABLE hook_points ADD COLUMN rva_delta INTEGER DEFAULT NULL"),
+        ("relocation_method", "ALTER TABLE hook_points ADD COLUMN relocation_method TEXT DEFAULT 'ghidra_full' CHECK(relocation_method IN ('ghidra_full','exact_scan','manual','imported'))"),
+        ("relocation_confidence", "ALTER TABLE hook_points ADD COLUMN relocation_confidence REAL DEFAULT NULL"),
+    ]
+    for column, sql in additions:
+        if not column_exists(conn, "hook_points", column):
+            conn.execute(sql)
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_hook_derived_from ON hook_points(derived_from_version_id)")
+
+
+def ensure_migrations(conn):
+    ensure_migrations_table(conn)
+    if MIGRATIONS_DIR.exists():
+        for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
+            version = path.stem
+            row = conn.execute("SELECT 1 FROM schema_migrations WHERE version=?", (version,)).fetchone()
+            if row:
+                continue
+            if version == "001_relocate_fields" and column_exists(conn, "hook_points", "derived_from_version_id"):
+                conn.execute("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, datetime('now'))", (version,))
+                continue
+            conn.executescript(path.read_text(encoding="utf-8"))
+            ensure_relocate_columns(conn)
+            conn.execute("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, datetime('now'))", (version,))
+    else:
+        ensure_relocate_columns(conn)
+
+
 def ensure_schema(conn, schema_path: Path):
     conn.executescript(schema_path.read_text(encoding="utf-8"))
+    ensure_migrations(conn)
     conn.commit()
 
 
@@ -28,7 +77,8 @@ def query_exact(conn, browser, version, platform, arch):
     rows = conn.execute(
         """
         SELECT b.name AS browser, v.version, v.platform, v.arch, ts.name AS tls_stack,
-               hp.kind, hp.function_name, hp.rva, hp.fingerprint, hp.fingerprint_len, hp.role
+               hp.kind, hp.function_name, hp.rva, hp.fingerprint, hp.fingerprint_len, hp.role,
+               hp.derived_from_version_id, hp.rva_delta, hp.relocation_method, hp.relocation_confidence
         FROM versions v
         JOIN browsers b ON b.id = v.browser_id
         LEFT JOIN tls_stacks ts ON ts.id = v.tls_stack_id
@@ -45,7 +95,8 @@ def query_prefix(conn, fp):
     prefix = " ".join(fp.split()[:20])
     rows = conn.execute(
         """
-        SELECT b.name AS browser, v.version, v.platform, v.arch, hp.kind, hp.rva, hp.function_name
+        SELECT b.name AS browser, v.version, v.platform, v.arch, hp.kind, hp.rva, hp.function_name,
+               hp.relocation_method, hp.rva_delta, hp.relocation_confidence
         FROM hook_points hp
         JOIN versions v ON v.id = hp.version_id
         JOIN browsers b ON b.id = v.browser_id
@@ -94,6 +145,10 @@ def format_frida(rows):
             "rva": row["rva"],
             "fingerprint": row["fingerprint"],
             "fingerprint_len": row["fingerprint_len"],
+            "derived_from_version_id": row.get("derived_from_version_id"),
+            "rva_delta": row.get("rva_delta"),
+            "relocation_method": row.get("relocation_method"),
+            "relocation_confidence": row.get("relocation_confidence"),
         })
     return out
 

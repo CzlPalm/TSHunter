@@ -78,12 +78,27 @@ if [[ $BACKGROUND -eq 1 ]]; then
     RUN_TAG="${TAG:-$(date +%Y%m%d_%H%M%S)}"
     LOG_FILE="${OUTPUT_JSON%.json}_${RUN_TAG}.log"
     PID_FILE="${OUTPUT_JSON%.json}_${RUN_TAG}.pid"
-    nohup "${RUN_ARGS[@]}" >"$LOG_FILE" 2>&1 &
+    DONE_FILE="${OUTPUT_JSON%.json}_${RUN_TAG}.done"
+
+    (
+        START_EPOCH=$(date +%s)
+        "${RUN_ARGS[@]}" >"$LOG_FILE" 2>&1
+        EXIT_CODE=$?
+        END_EPOCH=$(date +%s)
+        {
+            echo "finished_at=$(date '+%Y-%m-%d %H:%M:%S %z')"
+            echo "duration_seconds=$((END_EPOCH - START_EPOCH))"
+            echo "exit_code=${EXIT_CODE}"
+            echo "log_file=${LOG_FILE}"
+            echo "json_out=${OUTPUT_JSON}"
+        } > "$DONE_FILE"
+    ) &
     BG_PID=$!
     echo "$BG_PID" > "$PID_FILE"
     echo "[*] Background analysis started"
     echo "[*] PID      : $BG_PID"
     echo "[*] PID file : $PID_FILE"
+    echo "[*] Done file: $DONE_FILE"
     echo "[*] Log file : $LOG_FILE"
     echo "[*] Output   : $OUTPUT_JSON"
     exit 0

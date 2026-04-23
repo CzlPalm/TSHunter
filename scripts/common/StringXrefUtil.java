@@ -31,7 +31,8 @@ public class StringXrefUtil {
 
         while (dataIterator.hasNext()) {
             Data data = dataIterator.next();
-            if (!"string".equalsIgnoreCase(data.getDataType().getName())) {
+            String typeName = data.getDataType() == null ? "" : data.getDataType().getName();
+            if (!"string".equalsIgnoreCase(typeName) && !typeName.toLowerCase().contains("string")) {
                 continue;
             }
 
@@ -48,6 +49,13 @@ public class StringXrefUtil {
             matches.addAll(collectReferencingFunctions(data.getAddress()));
         }
 
+        if (!matches.isEmpty()) {
+            return dedupe(matches);
+        }
+
+        for (Address addr : findAllStringsInReadonlyData(target)) {
+            matches.addAll(collectReferencingFunctions(addr));
+        }
         return dedupe(matches);
     }
 
@@ -276,6 +284,3 @@ public class StringXrefUtil {
         return result;
     }
 }
-
-
-

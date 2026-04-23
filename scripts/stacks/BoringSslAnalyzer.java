@@ -84,34 +84,56 @@ public class BoringSslAnalyzer extends StackAnalyzer {
         script.println("[*] HKDF: 开始识别（next-CALL 投票策略）...");
 
         Map<String, List<Address>> labelAddrs = new LinkedHashMap<>();
+        Map<String, List<FunctionRef>> labelRefs = new LinkedHashMap<>();
         for (String label : HKDF_TLS13_LABELS) {
+            List<FunctionRef> refs = xrefs.findFunctionsUsingString(label);
             List<Address> addrs = xrefs.findAllStringsInReadonlyData(label);
+            labelRefs.put(label, refs);
             labelAddrs.put(label, addrs);
-            script.println("[*] HKDF: label \"" + label + "\" rodata hits = " + addrs.size());
+            script.println("[*] HKDF: label \"" + label + "\" rodata hits = " + addrs.size() + ", function refs = " + refs.size());
         }
 
         Map<Function, Integer> votes = new LinkedHashMap<>();
         ReferenceManager refMgr = program.getReferenceManager();
 
-        for (Map.Entry<String, List<Address>> entry : labelAddrs.entrySet()) {
+        for (Map.Entry<String, List<FunctionRef>> entry : labelRefs.entrySet()) {
             String label = entry.getKey();
-            for (Address strAddr : entry.getValue()) {
-                ReferenceIterator refs = refMgr.getReferencesTo(strAddr);
-                while (refs.hasNext()) {
-                    Reference ref = refs.next();
-                    Address fromAddr = ref.getFromAddress();
-                    Function container = script.getFunctionContaining(fromAddr);
-                    if (container == null) {
-                        continue;
+            for (FunctionRef ref : entry.getValue()) {
+                if (ref == null || ref.function == null || ref.referenceAddress == null) {
+                    continue;
+                }
+                Function callee = xrefs.findFirstCalledFunctionAfterReference(ref.function, ref.referenceAddress);
+                if (callee == null) {
+                    continue;
+                }
+                votes.merge(callee, 1, Integer::sum);
+                script.println("[*] HKDF:   label=\"" + label + "\" LEA@" + ref.referenceAddress
+                    + " inside " + ref.function.getName()
+                    + " → CALL target " + callee.getName());
+            }
+        }
+
+        if (votes.isEmpty()) {
+            for (Map.Entry<String, List<Address>> entry : labelAddrs.entrySet()) {
+                String label = entry.getKey();
+                for (Address strAddr : entry.getValue()) {
+                    ReferenceIterator refs = refMgr.getReferencesTo(strAddr);
+                    while (refs.hasNext()) {
+                        Reference ref = refs.next();
+                        Address fromAddr = ref.getFromAddress();
+                        Function container = script.getFunctionContaining(fromAddr);
+                        if (container == null) {
+                            continue;
+                        }
+                        Function callee = xrefs.findFirstCalledFunctionAfterReference(container, fromAddr);
+                        if (callee == null) {
+                            continue;
+                        }
+                        votes.merge(callee, 1, Integer::sum);
+                        script.println("[*] HKDF:   fallback label=\"" + label + "\" LEA@" + fromAddr
+                            + " inside " + container.getName()
+                            + " → CALL target " + callee.getName());
                     }
-                    Function callee = xrefs.findFirstCalledFunctionAfterReference(container, fromAddr);
-                    if (callee == null) {
-                        continue;
-                    }
-                    votes.merge(callee, 1, Integer::sum);
-                    script.println("[*] HKDF:   label=\"" + label + "\" LEA@" + fromAddr
-                        + " inside " + container.getName()
-                        + " → CALL target " + callee.getName());
                 }
             }
         }
@@ -134,13 +156,29 @@ public class BoringSslAnalyzer extends StackAnalyzer {
         }
 
         Set<Function> hsOnly = new LinkedHashSet<>();
-        for (Address addr : labelAddrs.getOrDefault("c hs traffic", List.of())) {
-            hsOnly.addAll(xrefs.getReferencingFunctions(addr));
+        for (FunctionRef ref : labelRefs.getOrDefault("c hs traffic", List.of())) {
+            if (ref != null && ref.function != null) {
+                hsOnly.add(ref.function);
+            }
         }
+        if (hsOnly.isEmpty()) {
+            for (Address addr : labelAddrs.getOrDefault("c hs traffic", List.of())) {
+                hsOnly.addAll(xrefs.getReferencingFunctions(addr));
+            }
+        }
+
         Set<Function> shsFuncs = new LinkedHashSet<>();
-        for (Address addr : labelAddrs.getOrDefault("s hs traffic", List.of())) {
-            shsFuncs.addAll(xrefs.getReferencingFunctions(addr));
+        for (FunctionRef ref : labelRefs.getOrDefault("s hs traffic", List.of())) {
+            if (ref != null && ref.function != null) {
+                shsFuncs.add(ref.function);
+            }
         }
+        if (shsFuncs.isEmpty()) {
+            for (Address addr : labelAddrs.getOrDefault("s hs traffic", List.of())) {
+                shsFuncs.addAll(xrefs.getReferencingFunctions(addr));
+            }
+        }
+
         hsOnly.retainAll(shsFuncs);
         Function fallback = xrefs.pickBestFunctionByXrefs(hsOnly);
         if (fallback != null) {
@@ -165,17 +203,33 @@ public class BoringSslAnalyzer extends StackAnalyzer {
     private void identifyPRF() {
         script.println("[*] PRF: 开始识别...");
 
+        List<FunctionRef> masterSecretRefs = xrefs.findFunctionsUsingString("master secret");
+        List<FunctionRef> extMasterSecretRefs = xrefs.findFunctionsUsingString("extended master secret");
         List<Address> masterSecretAddrs = xrefs.findAllStringsInReadonlyData("master secret");
         List<Address> extMasterSecretAddrs = xrefs.findAllStringsInReadonlyData("extended master secret");
 
         Set<Function> msFuncs = new LinkedHashSet<>();
         Set<Function> emsFuncs = new LinkedHashSet<>();
 
-        for (Address addr : masterSecretAddrs) {
-            msFuncs.addAll(xrefs.getReferencingFunctions(addr));
+        for (FunctionRef ref : masterSecretRefs) {
+            if (ref != null && ref.function != null) {
+                msFuncs.add(ref.function);
+            }
         }
-        for (Address addr : extMasterSecretAddrs) {
-            emsFuncs.addAll(xrefs.getReferencingFunctions(addr));
+        for (FunctionRef ref : extMasterSecretRefs) {
+            if (ref != null && ref.function != null) {
+                emsFuncs.add(ref.function);
+            }
+        }
+        if (msFuncs.isEmpty()) {
+            for (Address addr : masterSecretAddrs) {
+                msFuncs.addAll(xrefs.getReferencingFunctions(addr));
+            }
+        }
+        if (emsFuncs.isEmpty()) {
+            for (Address addr : extMasterSecretAddrs) {
+                emsFuncs.addAll(xrefs.getReferencingFunctions(addr));
+            }
         }
 
         Set<Function> intersection = new LinkedHashSet<>(msFuncs);
@@ -212,6 +266,18 @@ public class BoringSslAnalyzer extends StackAnalyzer {
 
     private void identifyKeyExpansion() {
         script.println("[*] KEY_EXPANSION: 开始识别...");
+
+        List<FunctionRef> refs = xrefs.findFunctionsUsingString("key expansion");
+        for (FunctionRef ref : refs) {
+            if (ref != null && ref.function != null) {
+                String note = "TLS 1.2 key block derivation";
+                if (isSameAsPrf(ref.function)) {
+                    note = "shared with PRF";
+                }
+                addResult("KEY_EXPANSION", ref.function, note);
+                return;
+            }
+        }
 
         List<Address> addrs = xrefs.findAllStringsInReadonlyData("key expansion");
         for (Address addr : addrs) {
@@ -271,6 +337,3 @@ public class BoringSslAnalyzer extends StackAnalyzer {
         return prf.rva.equals(fingerprintExtractor.getRva(function.getEntryPoint()));
     }
 }
-
-
-

@@ -24,10 +24,7 @@ public class MinimalAnalysisOption extends GhidraScript {
     private static final String LIBRARY_IDENTIFICATION = "Library Identification";
     private static final String DEMANGLER_MS_ANALYZER = "Demangler Microsoft";
     private static final String DEMANGLER_GNU_ANALYZER = "Demangler GNU";
-    private static final String SCALAR_OPERAND_ANALYZER = "Scalar Operand References";
-    private static final String DECOMPILER_SWITCH_ANALYSIS = "Decompiler Switch Analysis";
     private static final String STACK_ANALYSIS = "Stack";
-    private static final String CONSTANT_PROPAGATION_ANALYSIS = "Basic Constant Reference Analyzer";
     private static final String DWARF_ANALYZER = "DWARF";
 
     @Override
@@ -37,10 +34,7 @@ public class MinimalAnalysisOption extends GhidraScript {
         disableIfPresent(options, LIBRARY_IDENTIFICATION);
         disableIfPresent(options, DEMANGLER_MS_ANALYZER);
         disableIfPresent(options, DEMANGLER_GNU_ANALYZER);
-        disableIfPresent(options, SCALAR_OPERAND_ANALYZER);
-        disableIfPresent(options, DECOMPILER_SWITCH_ANALYSIS);
         disableIfPresent(options, STACK_ANALYSIS);
-        disableIfPresent(options, CONSTANT_PROPAGATION_ANALYSIS);
         disableIfPresent(options, DWARF_ANALYZER);
     }
 
@@ -50,4 +44,3 @@ public class MinimalAnalysisOption extends GhidraScript {
         }
     }
 }
-

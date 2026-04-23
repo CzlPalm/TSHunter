@@ -1,0 +1,3 @@
+pyelftools>=0.29
+pefile>=2023.2.7
+pytest>=7.0
