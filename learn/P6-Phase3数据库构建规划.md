@@ -771,3 +771,7 @@ Day 12   根据 T2/T3 结果决定：
 2. **BoringSecretHunter / TLSKeyHunter 两个子目录**在阶段 A–D 期间**继续保留**；它们只是历史参考物。等 D 通过后再做仓库瘦身 + git filter-repo。
 3. **`data/fingerprints.db` 别进 git**；只把 `data/seed_fingerprints.json` 进 git 作为版本化真值。
 4. **五元组关联**（Phase 5）和**Firefox/OpenSSL 真实实现**（扩展 Phase C）都在阶段 D 通过之后再上。不要贪多。
+
+
+
+...额外部分：

@@ -2,45 +2,48 @@ Using log config file: file:/usr/local/src/custom_log4j.xml
 Using log file: /root/.config/ghidra/ghidra_12.0.3_PUBLIC/application.log
 Loading user preferences: /root/.config/ghidra/ghidra_12.0.3_PUBLIC/preferences
 Searching for classes...
-Class search complete (507 ms)
+Class search complete (519 ms)
 Initializing SSL Context
 Initializing Random Number Generator...
 Random Number Generator initialization complete: NativePRNGNonBlocking
 Trust manager disabled, cacerts have not been set
 Starting cache cleanup: /var/tmp/root-ghidra/fscache2
 Finished cache cleanup, estimated storage used: 0
-Headless startup complete (1282 ms)
+Headless startup complete (1220 ms)
 Class searcher loaded 58 extension points (18 false positives)
-REPORT: Could not find -scriptPath entry, skipping: /usr/local/src:/usr/local/src/common:/usr/local/src/stacks:/usr/local/src/detect
 HEADLESS Script Paths:
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Debug/Debugger/ghidra_scripts
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Processors/PIC/ghidra_scripts
-    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
-    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /usr/local/src/stacks
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/FileFormats/ghidra_scripts
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/WildcardAssembler/ghidra_scripts
-    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
-    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
-    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/Base/ghidra_scripts
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/FunctionID/ghidra_scripts
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/PyGhidra/ghidra_scripts
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/SystemEmulation/ghidra_scripts
+    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
+    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
+    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
+    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
+    /usr/local/src/detect
+    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/VersionTracking/ghidra_scripts
+    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Processors/JVM/ghidra_scripts
+    /usr/local/src
+    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Processors/8051/ghidra_scripts
+    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/Decompiler/ghidra_scripts
+    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/Base/ghidra_scripts
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/SwiftDemangler/ghidra_scripts
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Processors/Atmel/ghidra_scripts
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Debug/Debugger-rmi-trace/ghidra_scripts
+    /usr/local/src/common
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/DecompilerDependent/ghidra_scripts
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Processors/DATA/ghidra_scripts
-    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/MicrosoftCodeAnalyzer/ghidra_scripts
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/Jython/ghidra_scripts
-    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/GnuDemangler/ghidra_scripts
-    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/BSim/ghidra_scripts
     /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/BytePatterns/ghidra_scripts
-    /opt/ghidra_12.0.3_PUBLIC/Ghidra/Features/PDB/ghidra_scripts
 HEADLESS: execution starts
-Creating project: /tmp/tlshunter_1776828757
-Creating project: /tmp/tlshunter_1776828757
+Creating project: /tmp/tlshunter_1776866943
+Creating project: /tmp/tlshunter_1776866943
 REPORT: Processing input files: 
-     project: /tmp/tlshunter_1776828757
+     project: /tmp/tlshunter_1776866943
 IMPORTING: file:///usr/local/src/binaries/chrome
 Using Loader: Executable and Linking Format (ELF)
 Using Language/Compiler: x86:LE:64:default:gcc
@@ -95,27 +98,8 @@ Resolving External Symbols of [/chrome] - 1328 unresolved symbols, no external l
 
 IMPORTING: Loaded 0 additional files
 REPORT: Execute script: MinimalAnalysisOption.java 
-Failed to find script in any script directory: /usr/local/src/MinimalAnalysisOption.java
-REPORT SCRIPT ERROR: MinimalAnalysisOption.java : The class could not be found. It must be the public class of the .java file: Failed to find source bundle containing script: /usr/local/src/MinimalAnalysisOption.java
-ghidra.app.script.GhidraScriptLoadException: The class could not be found. It must be the public class of the .java file: Failed to find source bundle containing script: /usr/local/src/MinimalAnalysisOption.java
-	at ghidra.app.script.JavaScriptProvider.getScriptInstance(JavaScriptProvider.java:114)
-	at ghidra.app.util.headless.HeadlessAnalyzer.runScriptsList(HeadlessAnalyzer.java:924)
-	at ghidra.app.util.headless.HeadlessAnalyzer.analyzeProgram(HeadlessAnalyzer.java:1005)
-	at ghidra.app.util.headless.HeadlessAnalyzer.processFileWithImport(HeadlessAnalyzer.java:1584)
-	at ghidra.app.util.headless.HeadlessAnalyzer.processWithLoader(HeadlessAnalyzer.java:1744)
-	at ghidra.app.util.headless.HeadlessAnalyzer.processWithImport(HeadlessAnalyzer.java:1685)
-	at ghidra.app.util.headless.HeadlessAnalyzer.processWithImport(HeadlessAnalyzer.java:1769)
-	at ghidra.app.util.headless.HeadlessAnalyzer.processLocal(HeadlessAnalyzer.java:462)
-	at ghidra.app.util.headless.AnalyzeHeadless.launch(AnalyzeHeadless.java:199)
-	at ghidra.GhidraLauncher.launch(GhidraLauncher.java:81)
-	at ghidra.Ghidra.main(Ghidra.java:54)
-Caused by: java.lang.ClassNotFoundException: Failed to find source bundle containing script: /usr/local/src/MinimalAnalysisOption.java
-	at ghidra.app.script.JavaScriptProvider.loadClass(JavaScriptProvider.java:155)
-	at ghidra.app.script.JavaScriptProvider.getScriptInstance(JavaScriptProvider.java:97)
-	... 10 more
+SCRIPT: /usr/local/src/MinimalAnalysisOption.java
 ANALYZING all memory and code: file:///usr/local/src/binaries/chrome
-DWARF external debug information found: ExternalDebugInfo [filename=chrome.debug, crc=349cc17e, hash=7464511981156f0cd2d389c9f81671f24b3c9ac4]
-Unable to find DWARF information, skipping DWARF analysis
 Invalid PNG data at 01865518
 Invalid GIF data at 01c38146
 Invalid GIF data at 01c38154
@@ -128,3 +112,101 @@ Invalid PNG data at 0ae1ec93
 Invalid PNG data at 0ae2003f
 Invalid PNG data at 0ae2bacb
 Invalid PNG data at 0e9a16e7
+Packed database cache: /var/tmp/root-ghidra/packed-db-cache
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+Applied data type archive: generic_clib_64
+Applied data type archive: rust-common
+-----------------------------------------------------
+    ASCII Strings                              9.603 secs
+    Apply Data Archives                        0.715 secs
+    Call Convention ID                         2.704 secs
+    Call-Fixup Installer                     311.827 secs
+    Create Address Tables                     21.953 secs
+    Create Address Tables - One Time         181.511 secs
+    Create Function                          117.980 secs
+    Data Reference                            46.887 secs
+    Demangler Rust                             0.180 secs
+    Disassemble                               67.614 secs
+    Disassemble Entry Points                  94.017 secs
+    ELF Scalar Operand References            149.741 secs
+    Embedded Media                             0.908 secs
+    External Entry References                  0.003 secs
+    Function Start Pre Search                  0.808 secs
+    Function Start Search                      9.936 secs
+    Function Start Search After Code          30.332 secs
+    Function Start Search After Data           9.923 secs
+    GCC Exception Handlers                    14.142 secs
+    Non-Returning Functions - Discovered   35656.807 secs
+    Non-Returning Functions - Known            0.009 secs
+    Reference                                 93.367 secs
+    Rust String Analyzer                      14.867 secs
+    Shared Return Calls                      439.984 secs
+    Subroutine References                    155.065 secs
+    Subroutine References - One Time           0.051 secs
+    x86 Constant Reference Analyzer          508.126 secs
+-----------------------------------------------------
+     Total Time   37939 secs
+-----------------------------------------------------
+
+REPORT: Analysis succeeded for file: file:///usr/local/src/binaries/chrome
+REPORT: Execute script: TLShunterAnalyzer.java '-maxMem' '16G' 
+SCRIPT: /usr/local/src/TLShunterAnalyzer.java
+TLShunterAnalyzer.java> TLShunter integrated analyzer v0.6.0-modular
+TLShunterAnalyzer.java> [*] Binary: chrome
+TLShunterAnalyzer.java> [*] Image base: 00100000
+TLShunterAnalyzer.java> [*] Detector: boringssl → confidence 0.99
+TLShunterAnalyzer.java> [*] Detector: openssl → confidence 0.70
+TLShunterAnalyzer.java> [*] Detector: nss → confidence 0.00
+TLShunterAnalyzer.java> [*] Detector: rustls → confidence 0.25
+TLShunterAnalyzer.java> [*] Selected: boringssl (confidence=0.99)
+TLShunterAnalyzer.java> [DETECT] stack=boringssl confidence=0.99
+TLShunterAnalyzer.java> [*] HKDF: 开始识别（next-CALL 投票策略）...
+TLShunterAnalyzer.java> [*] HKDF: label "c hs traffic" rodata hits = 1
+TLShunterAnalyzer.java> [*] HKDF: label "s hs traffic" rodata hits = 1
+TLShunterAnalyzer.java> [*] HKDF: label "c ap traffic" rodata hits = 1
+TLShunterAnalyzer.java> [*] HKDF: label "s ap traffic" rodata hits = 1
+TLShunterAnalyzer.java> [-] HKDF: 所有策略均未命中
+TLShunterAnalyzer.java> [WARN] type=SSL_LOG_SECRET status=not_found
+TLShunterAnalyzer.java> [*] PRF: 开始识别...
+TLShunterAnalyzer.java> [-] PRF: 所有策略均未命中
+TLShunterAnalyzer.java> [*] KEY_EXPANSION: 开始识别...
+TLShunterAnalyzer.java> [-] KEY_EXPANSION: 未找到
+TLShunterAnalyzer.java> [*] Analysis finished. Hook points: 0
+ANALYZING changes made by post scripts: file:///usr/local/src/binaries/chrome
+REPORT: Post-analysis succeeded for file: file:///usr/local/src/binaries/chrome
+/chrome: file created (root)
+REPORT: Save succeeded for: /chrome (tlshunter_1776866943:/chrome)
+REPORT: Import succeeded

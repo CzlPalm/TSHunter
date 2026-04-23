@@ -95,3 +95,4 @@ INSERT OR IGNORE INTO browsers(name, vendor, default_tls_stack_id) VALUES
     ('electron', 'Various',   (SELECT id FROM tls_stacks WHERE name='boringssl'));
 
 
+
