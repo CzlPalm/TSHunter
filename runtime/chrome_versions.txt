@@ -1,0 +1,14 @@
+# P6 Phase 2 目标 Chrome milestones（一行一个，'#' 开头为注释）
+# 选版逻辑：
+#   - baseline 为 143，先覆盖近半年主要 milestones，再向下回溯
+#   - 每个 milestone 对应 Chrome for Testing 的最新小版本
+#   - 修改后 tools/run_batch.sh 会按此文件顺序处理
+135
+136
+137
+138
+139
+140
+141
+142
+143
