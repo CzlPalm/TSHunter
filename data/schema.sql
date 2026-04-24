@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS versions (
     analyzer_version TEXT,
     verified INTEGER DEFAULT 0,
     note TEXT,
+    profile_ref TEXT DEFAULT NULL,
     UNIQUE(browser_id, version, platform, arch),
     FOREIGN KEY (browser_id) REFERENCES browsers(id) ON DELETE CASCADE,
     FOREIGN KEY (tls_stack_id) REFERENCES tls_stacks(id)
@@ -58,6 +59,10 @@ CREATE TABLE IF NOT EXISTS hook_points (
     relocation_method TEXT DEFAULT 'ghidra_full'
         CHECK(relocation_method IN ('ghidra_full','exact_scan','manual','imported')),
     relocation_confidence REAL DEFAULT NULL,
+    read_on TEXT DEFAULT 'onLeave',
+    output_len INTEGER DEFAULT NULL,
+    ghidra_name TEXT DEFAULT NULL,
+    note TEXT DEFAULT NULL,
     UNIQUE(version_id, kind),
     FOREIGN KEY (version_id) REFERENCES versions(id) ON DELETE CASCADE
 );

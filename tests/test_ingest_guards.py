@@ -8,7 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 INGEST = ROOT / "tools" / "ingest.py"
-SCHEMA = ROOT / "tools" / "schema.sql"
+SCHEMA = ROOT / "data" / "schema.sql"
 
 
 def _run_ingest(json_path: Path, db_path: Path, *extra: str) -> subprocess.CompletedProcess:

@@ -1,2 +1,3 @@
-"""TSHunter unified package skeleton for U1-pre."""
+from .cli import main
 
+__all__ = ["main"]
