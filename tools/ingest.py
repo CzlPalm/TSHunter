@@ -2,6 +2,7 @@
 import argparse
 import json
 import sqlite3
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -48,10 +49,20 @@ def ensure_relocate_columns(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_hook_derived_from ON hook_points(derived_from_version_id)")
 
 
+def ensure_analyzer_runs_status_column(conn):
+    if not column_exists(conn, "analyzer_runs", "status"):
+        conn.execute(
+            "ALTER TABLE analyzer_runs ADD COLUMN status TEXT DEFAULT 'SUCCESS' "
+            "CHECK(status IN ('SUCCESS','FAILED_EMPTY','FAILED_GHIDRA'))"
+        )
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_analyzer_runs_status ON analyzer_runs(status)")
+
+
 def ensure_migrations(conn):
     ensure_migrations_table(conn)
     if not MIGRATIONS_DIR.exists():
         ensure_relocate_columns(conn)
+        ensure_analyzer_runs_status_column(conn)
         return
     for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
         version = path.stem
@@ -64,8 +75,15 @@ def ensure_migrations(conn):
                 (version,),
             )
             continue
+        if version == "002_analyzer_runs_status" and column_exists(conn, "analyzer_runs", "status"):
+            conn.execute(
+                "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, datetime('now'))",
+                (version,),
+            )
+            continue
         conn.executescript(path.read_text(encoding="utf-8"))
         ensure_relocate_columns(conn)
+        ensure_analyzer_runs_status_column(conn)
         conn.execute(
             "INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, datetime('now'))",
             (version,),
@@ -245,29 +263,50 @@ def enrich_meta(meta: dict, args):
         meta["tls_lib"] = args.tls_lib
 
 
+def record_analyzer_run(conn, version_id, meta: dict, source_path, exit_code: int, status: str):
+    now = datetime.now(timezone.utc).isoformat()
+    conn.execute(
+        "INSERT INTO analyzer_runs(version_id, started_at, finished_at, duration_seconds, analyzer_version, exit_code, json_path, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            version_id,
+            now,
+            now,
+            0,
+            meta.get("analyzer_version"),
+            exit_code,
+            source_path,
+            status,
+        ),
+    )
+
+
 def ingest_payload(conn, payload: dict, args, source_override: str | None = None):
     meta = payload.setdefault("meta", {})
     enrich_meta(meta, args)
     hook_points = payload.get("hook_points", {})
+    source_path = payload.get("_source_path")
+
     if not hook_points and not args.allow_empty:
-        raise SystemExit(
-            f"[FATAL] Refusing to ingest empty hook_points from {payload.get('_source_path')}. If analysis genuinely found nothing, pass --allow-empty."
+        version_id = None
+        if all(meta.get(k) for k in ("browser", "version", "platform", "arch")):
+            try:
+                version_id = ensure_version(conn, meta, args.upsert)
+            except SystemExit:
+                version_id = None
+        record_analyzer_run(conn, version_id, meta, source_path, 2, "FAILED_EMPTY")
+        conn.commit()
+        sys.stderr.write(
+            f"[FATAL] Refusing to ingest empty hook_points from {source_path}. "
+            "If analysis genuinely found nothing, pass --allow-empty.\n"
         )
+        sys.exit(2)
+
     version_id = ensure_version(conn, meta, args.upsert)
     for kind, item in hook_points.items():
         upsert_hook(conn, version_id, kind, item, args.upsert, source_override)
-    conn.execute(
-        "INSERT INTO analyzer_runs(version_id, started_at, finished_at, duration_seconds, analyzer_version, exit_code, json_path) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (
-            version_id,
-            datetime.now(timezone.utc).isoformat(),
-            datetime.now(timezone.utc).isoformat(),
-            0,
-            meta.get("analyzer_version"),
-            0,
-            payload.get("_source_path"),
-        ),
-    )
+    status = "SUCCESS" if hook_points else "FAILED_EMPTY"
+    exit_code = 0 if hook_points else 2
+    record_analyzer_run(conn, version_id, meta, source_path, exit_code, status)
 
 
 def ingest_relocate_payload(conn, payload: dict, args):

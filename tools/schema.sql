@@ -77,6 +77,8 @@ CREATE TABLE IF NOT EXISTS analyzer_runs (
     exit_code INTEGER,
     log_path TEXT,
     json_path TEXT,
+    status TEXT DEFAULT 'SUCCESS'
+        CHECK(status IN ('SUCCESS','FAILED_EMPTY','FAILED_GHIDRA')),
     FOREIGN KEY (version_id) REFERENCES versions(id) ON DELETE SET NULL
 );
 
