@@ -39,6 +39,21 @@ def test_batch_help_shows_description():
     assert 'batch' in result.stdout.lower()
 
 
+def test_forwarded_help_with_separator_succeeds():
+    cases = [
+        ('analyze', '--help'),
+        ('ingest', '--help'),
+        ('query', '--help'),
+        ('batch', '--help'),
+        ('download', '--help'),
+        ('relocate', 'scan', '--help'),
+    ]
+    for case in cases:
+        result = _run(case[0], '--', *case[1:])
+        assert result.returncode == 0, f'{case} forwarded help failed: {result.stderr}'
+        assert 'usage:' in result.stdout.lower()
+
+
 def test_batch_empty_binaries_dir_exits_nonzero(tmp_path):
     result = subprocess.run(
         [sys.executable, '-m', 'tshunter.cli', 'batch',

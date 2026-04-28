@@ -21,10 +21,16 @@ CLI_OVERVIEW = (
 def _run_script(path: Path, forward_args: list[str]):
     old_argv = sys.argv[:]
     try:
-        sys.argv = [str(path), *forward_args]
+        sys.argv = [str(path), *_strip_forward_separator(forward_args)]
         runpy.run_path(str(path), run_name='__main__')
     finally:
         sys.argv = old_argv
+
+
+def _strip_forward_separator(forward_args: list[str]) -> list[str]:
+    if forward_args and forward_args[0] == '--':
+        return forward_args[1:]
+    return forward_args
 
 
 def _add_forwarding_subparser(sub, name: str, *, help_text: str, description: str, epilog: str, runner):
@@ -57,8 +63,8 @@ def build_parser():
         'analyze',
         help_text='Run static analyzer against a binary or batch directory',
         description='Run the Ghidra-backed static analyzer and emit analysis JSON.',
-        epilog='Example: tshunter analyze --binary /path/chrome --output results/chrome.json',
-        runner=lambda args: analyze_mod.main(args.forward),
+        epilog='Example: tshunter analyze -- --binary /path/chrome --output results/chrome.json',
+        runner=lambda args: analyze_mod.main(_strip_forward_separator(args.forward)),
     )
 
     _add_forwarding_subparser(
@@ -75,8 +81,8 @@ def build_parser():
         'ingest',
         help_text='Ingest analysis JSON or relocate results into SQLite',
         description='Import analysis output into the fingerprint database.',
-        epilog='Example: tshunter ingest --json results/chrome.json --db data/fingerprints.db --upsert',
-        runner=lambda args: ingest_mod.main(args.forward),
+        epilog='Example: tshunter ingest -- --json results/chrome.json --db data/fingerprints.db --upsert',
+        runner=lambda args: ingest_mod.main(_strip_forward_separator(args.forward)),
     )
 
     _add_forwarding_subparser(
@@ -84,8 +90,8 @@ def build_parser():
         'query',
         help_text='Query the fingerprint database',
         description='Query exact versions, fingerprint prefixes, or report statistics from the DB.',
-        epilog='Example: tshunter query --browser chrome --version 143.0.7499.169 --platform linux --arch x86_64',
-        runner=lambda args: query_mod.main(args.forward),
+        epilog='Example: tshunter query -- --browser chrome --version 143.0.7499.169 --platform linux --arch x86_64',
+        runner=lambda args: query_mod.main(_strip_forward_separator(args.forward)),
     )
 
     _add_forwarding_subparser(
@@ -93,7 +99,7 @@ def build_parser():
         'relocate',
         help_text='Run fingerprint-based relocate scan',
         description='Use baseline fingerprints to relocate hook RVAs in a nearby browser binary.',
-        epilog='Example: tshunter relocate --binary /path/chrome --baseline tests/golden/hooks/chrome_143...json --scan-only',
+        epilog='Example: tshunter relocate -- scan --binary /path/chrome --source-browser chrome --source-version 143.0.7499.169 --source-platform linux --source-arch x86_64 --output results/relocate.json',
         runner=lambda args: _run_script(ROOT / 'tshunter' / 'relocate.py', args.forward),
     )
 
@@ -102,7 +108,7 @@ def build_parser():
         'merge',
         help_text='Merge auto-analysis output with baseline metadata',
         description='Combine auto-generated hook results with baseline metadata for runtime compatibility.',
-        epilog='Example: tshunter merge --auto results/chrome.json --baseline tests/golden/hooks/chrome_143...json --version 143.0.7499.169 --out merged.json',
+        epilog='Example: tshunter merge -- --auto results/chrome.json --baseline tests/golden/hooks/chrome_143...json --version 143.0.7499.169 --out merged.json',
         runner=lambda args: _run_script(ROOT / 'tshunter' / 'merge.py', args.forward),
     )
 
@@ -111,7 +117,7 @@ def build_parser():
         'download',
         help_text='Download Chrome for Testing binaries',
         description='Download Chrome for Testing binaries and metadata for later analysis.',
-        epilog='Example: tshunter download --milestones 142,143 --output-dir artifacts/chrome',
+        epilog='Example: tshunter download -- --milestones 142,143 --output-dir artifacts/chrome',
         runner=lambda args: _run_script(ROOT / 'tshunter' / 'downloader.py', args.forward),
     )
 
@@ -120,7 +126,7 @@ def build_parser():
         'batch',
         help_text='Batch analyze a milestone range or a binaries directory',
         description='Iterate browser versions, reuse DB hits / relocate baselines, fall back to full Ghidra analyze.',
-        epilog='Example: tshunter batch --browser chrome --binaries-dir binaries/Chrome',
+        epilog='Example: tshunter batch -- --browser chrome --binaries-dir binaries/Chrome',
         runner=lambda args: batch_mod.main(args.forward),
     )
     return parser

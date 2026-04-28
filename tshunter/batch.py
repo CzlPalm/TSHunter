@@ -216,7 +216,7 @@ def _download_milestones(milestones: set, output_dir: Path) -> None:
     import subprocess
     milestone_list = ','.join(sorted(milestones))
     cmd = [
-        sys.executable, '-m', 'tshunter.cli', 'download',
+        sys.executable, '-m', 'tshunter.cli', 'download', '--',
         '--milestones', milestone_list,
         '--output-dir', str(output_dir),
     ]
