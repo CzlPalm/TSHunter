@@ -1,0 +1,3 @@
+browser,version,platform,arch,hook_count,kinds
+chrome,143.0.7499.169,linux,x86_64,4,"hkdf,key_expansion,prf,ssl_log_secret"
+chrome,143.0.7499.4,linux,x86_64,4,"hkdf,key_expansion,prf,ssl_log_secret"

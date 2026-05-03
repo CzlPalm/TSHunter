@@ -1,0 +1,5 @@
+/root/Palm/TLSHunter/results/20260502-154529-batch.log
+2026-05-02 15:45:29 [INFO] run_id=20260502-154529-8ec36534  versions=14  dry_run=False  log=/root/Palm/TLSHunter/results/20260502-154529-batch.log
+2026-05-02 15:45:29 [INFO] db=data/fingerprints.db
+2026-05-02 15:45:29 [DEBUG]   [relocate] 130.0.6723.116: no verified baseline found, skipping relocate
+

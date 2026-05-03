@@ -75,6 +75,47 @@ class ProfileMissing(Exception):
     """Raised when profile_ref points to a JSON file that does not exist."""
 
 
+def _partial_relocate_acceptable(scan_result: dict, min_confidence: float) -> bool:
+    hooks = scan_result.get('hooks') or []
+    if not hooks:
+        return False
+    for hook in hooks:
+        if hook.get('match_type') == 'not_found' or not hook.get('new_rva'):
+            return False
+        if float(hook.get('confidence') or 0.0) < min_confidence:
+            return False
+    return True
+
+
+def _partial_note(scan_result: dict) -> dict:
+    summary = scan_result.get('relocation_summary') or {}
+    deltas = []
+    for hook in scan_result.get('hooks') or []:
+        raw = hook.get('delta')
+        if raw is None:
+            continue
+        try:
+            deltas.append(int(raw, 16))
+        except ValueError:
+            continue
+    median_delta = summary.get('median_delta')
+    max_outlier_delta = None
+    if deltas:
+        if median_delta:
+            try:
+                median_int = int(median_delta, 16)
+                max_outlier_delta = max(abs(delta - median_int) for delta in deltas)
+            except ValueError:
+                max_outlier_delta = max(abs(delta) for delta in deltas)
+        else:
+            max_outlier_delta = max(abs(delta) for delta in deltas)
+    return {
+        'partial_relocate': True,
+        'median_delta': median_delta,
+        'max_outlier_delta': max_outlier_delta,
+    }
+
+
 class VersionConfigLoader:
     def __init__(
         self,
@@ -82,11 +123,15 @@ class VersionConfigLoader:
         profiles_dir: Optional[Path] = None,
         allow_json_fallback: bool = False,
         auto_relocate: bool = True,
+        accept_partial: bool = False,
+        partial_min_confidence: float = 0.8,
     ):
         self.db_path = Path(db_path) if db_path else DEFAULT_DB
         self.profiles_dir = Path(profiles_dir) if profiles_dir else DEFAULT_PROFILES_DIR
         self.allow_json_fallback = allow_json_fallback
         self.auto_relocate = auto_relocate
+        self.accept_partial = accept_partial
+        self.partial_min_confidence = partial_min_confidence
 
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path)
@@ -159,7 +204,8 @@ class VersionConfigLoader:
             conn.close()
         return result
 
-    def _ingest_relocated(self, result: dict, browser, version, platform, arch, source_row: dict):
+    def _ingest_relocated(self, result: dict, browser, version, platform, arch, source_row: dict,
+                          *, relocation_method: str = 'exact_scan', note: dict | None = None):
         # Import lazily — ingest has sqlite side effects and its own migration stack.
         from tshunter import ingest as ingest_mod  # type: ignore
         from types import SimpleNamespace
@@ -167,6 +213,7 @@ class VersionConfigLoader:
         args = SimpleNamespace(
             browser=browser, version=version, platform=platform, arch=arch,
             tls_lib=None, upsert=True, allow_empty=False,
+            relocation_method=relocation_method, note=note,
         )
         conn = ingest_mod.db_connect(self.db_path)
         ingest_mod.apply_schema(conn, DEFAULT_DB.parent / 'schema.sql')
@@ -297,15 +344,34 @@ class VersionConfigLoader:
                                 return legacy
                         raise RelocateFailed(str(exc))
                     verdict = scan_result.get('verdict')
+                    relocation_method = 'exact_scan'
+                    note = None
                     if verdict != 'OK':
-                        if self.allow_json_fallback:
-                            legacy = self._load_json_legacy(browser, version, platform, arch)
-                            if legacy:
-                                return legacy
-                        raise RelocateFailed(
-                            f"relocate verdict={verdict}, refusing to auto-ingest"
+                        partial_ok = (
+                            verdict == 'PARTIAL'
+                            and self.accept_partial
+                            and _partial_relocate_acceptable(scan_result, self.partial_min_confidence)
                         )
-                    self._ingest_relocated(scan_result, browser, version, platform, arch, baseline)
+                        if not partial_ok:
+                            if self.allow_json_fallback:
+                                legacy = self._load_json_legacy(browser, version, platform, arch)
+                                if legacy:
+                                    return legacy
+                            raise RelocateFailed(
+                                f"relocate verdict={verdict}, refusing to auto-ingest"
+                            )
+                        relocation_method = 'exact_scan_partial'
+                        note = _partial_note(scan_result)
+                    self._ingest_relocated(
+                        scan_result,
+                        browser,
+                        version,
+                        platform,
+                        arch,
+                        baseline,
+                        relocation_method=relocation_method,
+                        note=note,
+                    )
                     version_row = self._query_version_row(conn, browser, version, platform, arch)
 
             if not version_row:
@@ -357,6 +423,7 @@ def _cli(argv=None):
         profiles_dir=args.profiles_dir,
         allow_json_fallback=args.allow_json_fallback,
         auto_relocate=not args.no_relocate,
+        accept_partial=False,
     )
     try:
         config = loader.load(

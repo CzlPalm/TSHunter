@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS hook_points (
     derived_from_version_id INTEGER REFERENCES versions(id),
     rva_delta INTEGER DEFAULT NULL,
     relocation_method TEXT DEFAULT 'ghidra_full'
-        CHECK(relocation_method IN ('ghidra_full','exact_scan','manual','imported')),
+        CHECK(relocation_method IN ('ghidra_full','exact_scan','exact_scan_partial','manual','imported')),
     relocation_confidence REAL DEFAULT NULL,
     read_on TEXT DEFAULT 'onLeave',
     output_len INTEGER DEFAULT NULL,
@@ -99,6 +99,27 @@ CREATE TABLE IF NOT EXISTS capture_sessions (
     secret TEXT,
     FOREIGN KEY (version_id) REFERENCES versions(id) ON DELETE SET NULL
 );
+
+CREATE TABLE IF NOT EXISTS batch_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id TEXT NOT NULL,
+    browser TEXT NOT NULL,
+    version TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    arch TEXT NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('pending','downloading','analyzing','ingesting','done','failed','skipped')),
+    started_at TEXT,
+    finished_at TEXT,
+    error_msg TEXT,
+    binary_sha256 TEXT,
+    analyzer_runs_id INTEGER,
+    method TEXT,
+    method_duration_sec REAL,
+    relocate_max_outlier_delta INTEGER,
+    FOREIGN KEY (analyzer_runs_id) REFERENCES analyzer_runs(id) ON DELETE SET NULL
+);
+CREATE INDEX IF NOT EXISTS idx_batch_run ON batch_jobs(run_id, status);
+CREATE INDEX IF NOT EXISTS idx_batch_version ON batch_jobs(browser, version, platform, arch);
 
 INSERT OR IGNORE INTO tls_stacks(name, description) VALUES
     ('boringssl', 'Google BoringSSL (Chrome, Edge, Electron)'),

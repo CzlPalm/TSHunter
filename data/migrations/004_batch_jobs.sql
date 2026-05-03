@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS batch_jobs (
     binary_sha256 TEXT,
     analyzer_runs_id INTEGER,
     method TEXT,
+    method_duration_sec REAL,
+    relocate_max_outlier_delta INTEGER,
     FOREIGN KEY (analyzer_runs_id) REFERENCES analyzer_runs(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_batch_run ON batch_jobs(run_id, status);

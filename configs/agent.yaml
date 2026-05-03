@@ -1,0 +1,57 @@
+agent:
+  enabled: true
+  poll_interval_minutes: 60
+  download_dir: ./artifacts/downloads
+  binary_dir: ./artifacts/binaries
+  metadata_dir: ./artifacts/metadata
+  max_parallel_downloads: 2
+  max_retries: 3
+  timeout_seconds: 1800
+
+policy:
+  auto_analyze: false
+  auto_verify: false
+  auto_publish: false
+  require_explicit_capture: true
+  allow_unverified_runtime_use: false
+
+platform:
+  os: linux
+  arch: x86_64
+
+sources:
+  chrome_cft:
+    enabled: true
+    channels:
+      - Stable
+      - Beta
+      - Dev
+      - Canary
+    platforms:
+      - linux64
+    known_good_url: https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json
+    last_known_good_url: https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json
+
+  edge:
+    enabled: true
+    channels:
+      - stable
+      - beta
+      - dev
+    platforms:
+      - linux_amd64
+    stable_pool_url: https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-stable/
+    beta_pool_url: https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-beta/
+    dev_pool_url: https://packages.microsoft.com/repos/edge/pool/main/m/microsoft-edge-dev/
+
+  firefox:
+    enabled: true
+    planning_only: true
+    channels:
+      - release
+      - beta
+      - nightly
+    platforms:
+      - linux-x86_64
+    product_details_url: https://product-details.mozilla.org/1.0/firefox_versions.json
+    releases_url: https://ftp.mozilla.org/pub/firefox/releases/

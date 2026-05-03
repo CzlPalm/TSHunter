@@ -166,6 +166,100 @@ def test_db_miss_auto_relocate_success(tmp_path, monkeypatch):
     assert config['hook_points']['hkdf']['relocation_method'] == 'exact_scan'
 
 
+def test_partial_relocate_rejected_by_default(tmp_path, monkeypatch):
+    db = tmp_path / 'test.db'
+    _seed_golden(db)
+    fake_binary = tmp_path / 'chrome_fake.bin'
+    fake_binary.write_bytes(b'\x00' * 64)
+
+    def fake_scan(binary, rows, browser, version, platform, arch):
+        hooks = []
+        for i, row in enumerate(rows):
+            hooks.append({
+                'kind': row['kind'],
+                'new_rva': row['rva'],
+                'delta': hex(i * 0x100),
+                'match_type': 'exact_match',
+                'confidence': 0.95,
+            })
+        return {
+            'tool_version': 'test-relocate',
+            'verdict': 'PARTIAL',
+            'target': {'sha256': 'fake', 'size': fake_binary.stat().st_size, 'image_base': '0x0'},
+            'hooks': hooks,
+            'relocation_summary': {'relocated': len(hooks), 'total_hooks': len(hooks),
+                                    'median_delta': '0x100', 'delta_consistent': False},
+        }
+
+    from tshunter import relocate as relocate_mod
+    monkeypatch.setattr(relocate_mod, 'scan', fake_scan)
+
+    with pytest.raises(cl.RelocateFailed):
+        _make_loader(db, auto_relocate=True).load(
+            'chrome', '143.0.7499.192', 'linux', 'x86_64', binary_path=fake_binary,
+        )
+
+
+def test_partial_relocate_can_be_accepted_with_policy_marker(tmp_path, monkeypatch):
+    db = tmp_path / 'test.db'
+    _seed_golden(db)
+    fake_binary = tmp_path / 'chrome_fake.bin'
+    fake_binary.write_bytes(b'\x00' * 64)
+
+    def fake_scan(binary, rows, browser, version, platform, arch):
+        hooks = []
+        for i, row in enumerate(rows):
+            hooks.append({
+                'kind': row['kind'],
+                'new_rva': row['rva'],
+                'delta': hex(i * 0x100),
+                'match_type': 'exact_match',
+                'confidence': 0.95,
+            })
+        return {
+            'tool_version': 'test-relocate',
+            'verdict': 'PARTIAL',
+            'target': {'sha256': 'fake', 'size': fake_binary.stat().st_size, 'image_base': '0x0'},
+            'hooks': hooks,
+            'relocation_summary': {'relocated': len(hooks), 'total_hooks': len(hooks),
+                                    'median_delta': '0x100', 'delta_consistent': False},
+        }
+
+    from tshunter import relocate as relocate_mod
+    monkeypatch.setattr(relocate_mod, 'scan', fake_scan)
+
+    config = _make_loader(
+        db,
+        auto_relocate=True,
+        accept_partial=True,
+        partial_min_confidence=0.8,
+    ).load('chrome', '143.0.7499.192', 'linux', 'x86_64', binary_path=fake_binary)
+
+    assert config['meta']['verified'] is False
+    assert config['hook_points']['hkdf']['relocation_method'] == 'exact_scan_partial'
+
+    conn = sqlite3.connect(db)
+    row = conn.execute(
+        """
+        SELECT v.verified, v.note, COUNT(*)
+        FROM versions v
+        JOIN browsers b ON b.id = v.browser_id
+        JOIN hook_points hp ON hp.version_id = v.id
+        WHERE b.name='chrome' AND v.version='143.0.7499.192'
+        GROUP BY v.id
+        """
+    ).fetchone()
+    conn.close()
+
+    assert row is not None
+    assert row[0] == 0
+    assert row[2] == 4
+    note = json.loads(row[1])
+    assert note['partial_relocate'] is True
+    assert note['median_delta'] == '0x100'
+    assert note['max_outlier_delta'] == 512
+
+
 def test_legacy_caller_import_gets_patched_function(tmp_path):
     """Simulate the capture.py flow: after _install_loader_patch, `from lib.version_detect
     import load_config` must yield the patched function."""

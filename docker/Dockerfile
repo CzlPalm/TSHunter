@@ -1,5 +1,6 @@
 # Base image with Java for Ghidra
 FROM gradle:jdk21
+LABEL version="0.6.0" description="TLSHunter Ghidra analyzer"
 
 RUN apt-get update && \
     apt-get install -y python3 python3-pip wget unzip file && \

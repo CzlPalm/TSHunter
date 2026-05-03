@@ -9,7 +9,7 @@ import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_IMAGE_TAG = "tlshunter:0.5.0"
+DEFAULT_IMAGE_TAG = "tlshunter:0.6.0"
 ANALYZER_VERSION = "0.6.0-modular"
 ANALYSIS_TOOL = "TLShunter v0.6.0"
 RESULT_RE = re.compile(r"\[RESULT\]\s+type=(\S+)\s+function=(\S+)\s+rva=(\S+)\s+fingerprint=(.+?)(?:\s+note=(\S+))?$")
@@ -37,6 +37,24 @@ def project_root() -> Path:
 
 def run(cmd, cwd=None):
     return subprocess.run(cmd, cwd=cwd, text=True, capture_output=True)
+
+
+def run_streaming(cmd, cwd=None):
+    """Run subprocess with real-time line-by-line output to stdout.
+
+    Returns a CompletedProcess-like object with combined stdout in .stdout.
+    """
+    proc = subprocess.Popen(
+        cmd, cwd=cwd, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+    )
+    lines = []
+    for line in proc.stdout:
+        line = line.rstrip('\n')
+        print(line, flush=True)
+        lines.append(line)
+    proc.wait()
+    return subprocess.CompletedProcess(cmd, proc.returncode, '\n'.join(lines), '')
 
 
 def ensure_image(root: Path, image_tag: str, rebuild: bool = False):
@@ -142,6 +160,7 @@ def build_output_json(binary: Path, parsed_results: dict, metadata: dict, image_
             "image_base": image_base,
             "ghidra_image_base": image_base,
             "profile_ref": metadata.get("profile_ref"),
+            "verified": True,
         },
         "hook_points": hook_points,
     }
@@ -171,7 +190,7 @@ def analyze_binary(binary: Path, output: Path, metadata: dict, image_tag: str, r
             "-v", f"{output_dir}:/host_output",
             image_tag,
         ]
-        result = run(docker_cmd)
+        result = run_streaming(docker_cmd)
         combined_output = _docker_output_text(result)
         (output_dir / "docker_run_output.log").write_text(combined_output, encoding="utf-8", errors="replace")
         if result.returncode != 0:

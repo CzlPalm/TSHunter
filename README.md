@@ -253,34 +253,20 @@ binaries/Chrome/
 
 ```bash
 # dry-run：只列版本计划，不写 DB
-tshunter batch \
-  --browser chrome \
-  --binaries-dir binaries/Chrome \
-  --platform linux \
-  --arch x86_64 \
-  --dry-run
+tshunter batch -- --browser chrome --binaries-dir binaries/Chrome --platform linux --arch x86_64 --dry-run
 
-# 真实运行（DB hit → relocate → 完整 Ghidra，按需自动回退）
-tshunter batch \
-  --browser chrome \
-  --binaries-dir binaries/Chrome \
-  --platform linux \
-  --arch x86_64 \
-  --db data/fingerprints.db
+# 真实运行（DB hit → 跳过；DB miss → relocate JSON + 完整 Ghidra 入 DB）
+# 日志自动写入 results/{timestamp}-batch.log
+tshunter batch -- --browser chrome --binaries-dir binaries/Chrome --platform linux --arch x86_64 --db data/fingerprints.db
 
 # 只处理指定 milestone（按 major 版本号过滤）
-tshunter batch \
-  --browser chrome \
-  --binaries-dir binaries/Chrome \
-  --milestones 143 \
-  --platform linux --arch x86_64
+tshunter batch -- --browser chrome --binaries-dir binaries/Chrome --milestones 143 --platform linux --arch x86_64 --db data/fingerprints.db
+
+# 用 --versions-file 指定版本列表（替代 --milestones）
+tshunter batch -- --browser chrome --versions-file chrome_versions.txt --binaries-dir binaries/Chrome --platform linux --arch x86_64 --db data/fingerprints.db
 
 # 从中断点续跑（使用上次输出的 run_id）
-tshunter batch \
-  --browser chrome \
-  --binaries-dir binaries/Chrome \
-  --platform linux --arch x86_64 \
-  --resume 20260428-120000-abcd1234
+tshunter batch -- --resume 20260428-120000-abcd1234 --browser chrome --binaries-dir binaries/Chrome --platform linux --arch x86_64 --db data/fingerprints.db
 ```
 
 ### 5.3 查看 batch 任务状态
@@ -380,3 +366,362 @@ bash monitor_analysis.sh
 - `docs/fingerprint_standard.md`
 - `docs/hkdf_identification.md`
 - `docs/relocation.md`
+
+---
+
+## 9. Download：批量下载 Chrome 二进制
+
+> **环境前提**：激活 fritap venv 后运行 tshunter。
+>
+> ```bash
+> source ~/fritap-env/bin/activate
+> ```
+
+快速示例：
+
+```bash
+# 列出 milestone 143 的所有历史 stable 版本
+tshunter download -- --source cft-all --milestones 143 --list
+
+# 按版本范围筛选并下载
+tshunter download --source cft-all \
+    --version-range 143.0.7499.0..143.0.7499.169 \
+    --output-dir binaries/Chrome \
+    --discard-zip
+
+# 只下载几个离散版本
+tshunter download --source cft-all \
+    --versions 143.0.7499.42,143.0.7499.169 \
+    --output-dir binaries/Chrome \
+    --discard-zip
+```
+
+
+### 9.1 默认模式（每 milestone 最新一个版本）
+
+```bash
+# 下载 milestone 143 的最新版本（cft-latest，默认）
+tshunter download -- \
+  --milestones 143 \
+  --output-dir binaries/Chrome
+
+# 支持逗号列表与范围混合
+tshunter download -- \
+  --milestones 143-149 \
+  --output-dir binaries/Chrome
+```
+
+输出示例：
+
+```
+[*] 输出目录: binaries/Chrome
+[*] 目标 milestone: 143
+[DOWN] milestone=143 version=143.0.7499.169
+       url=https://storage.googleapis.com/.../chrome-linux64.zip
+[OK] 143.0.7499.169 -> binaries/Chrome/143.0.7499.169/chrome
+```
+
+### 9.2 全量历史版本模式（cft-all）
+
+CfT 的 `known-good-versions-with-downloads.json` 端点列出每个 milestone 所有历史 stable 版本（每 major 通常 30–80 条）。
+
+```bash
+# 下载 milestone 143 的所有历史 stable 版本（≥30 个小版本）
+tshunter download -- \
+  --source cft-all \
+  --milestones 143 \
+  --output-dir binaries/Chrome \
+  --discard-zip
+
+# 先列出有哪些版本，不实际下载
+tshunter download -- \
+  --source cft-all \
+  --milestones 143 \
+  --list
+```
+
+输出示例（`--list`）：
+
+```
+143    143.0.7499.1    https://storage.googleapis.com/.../chrome-linux64.zip
+143    143.0.7499.10   https://...
+...
+143    143.0.7499.169  https://...
+```
+
+### 9.3 磁盘布局
+
+下载后二进制布局与 `batch` 期望的结构完全一致：
+
+```
+binaries/Chrome/
+├── 143.0.7499.169/
+│   ├── chrome          ← ELF 可执行文件
+│   └── metadata.json   ← 版本/SHA256/下载时间
+├── 143.0.7499.170/
+│   └── ...
+└── 143.0.7499.192/
+    └── ...
+```
+
+### 9.4 chrome_versions.txt — 版本清单文件
+
+根目录的 `chrome_versions.txt` 可作为 `batch --versions-file` 的输入，每行一个完整版本号，`#` 开头为注释：
+
+```
+# 示例内容
+143.0.7499.169
+143.0.7499.192
+```
+
+配合 batch 使用：
+
+```bash
+tshunter batch \
+  --browser chrome \
+  --versions-file chrome_versions.txt \
+  --binaries-dir binaries/Chrome \
+  --platform linux --arch x86_64 \
+  --db data/fingerprints.db
+```
+
+
+
+### 9.5 `data/` 目录结构
+
+```
+data/
+├── fingerprints.db          ← 主指纹数据库（SQLite，gitignore）
+├── schema.sql               ← 数据库 schema 定义
+├── migrations/              ← 增量 schema 迁移（自动应用）
+│   ├── 001_relocate_fields.sql
+│   ├── 002_batch_jobs.sql
+│   ├── 003_three_layer.sql
+│   ├── 004_batch_jobs.sql
+│   ├── 005_partial_relocate.sql
+│   └── 006_batch_metrics.sql
+├── relocate/                ← batch 产生的 relocate 扫描 JSON（审查用）
+│   ├── relocate_chrome_143.0.7499.192_from_143.0.7499.169.json
+│   └── ...
+└── .gitignore               ← 忽略 *.db 和 relocate/*.json
+```
+
+说明：
+- `fingerprints.db` 是唯一数据源（SoT），只保存**完整 Ghidra 分析**的结果
+- `relocate/` 下的 JSON 是 batch 自动产生的 relocate 扫描结果，用于人工审查，**不入库**
+- 审查后如需入库，使用 `tshunter ingest --from-relocate data/relocate/xxx.json --upsert`
+
+### 9.6 观察正在运行的 Batch
+
+Batch 运行时会自动写日志到 `results/{timestamp}-batch.log`。用 `monitor_analysis.sh` 或 `tail -f` 观察：
+
+```bash
+# 方法 1：用 monitor_analysis.sh（自动发现 results/ 下最新的 .log）
+bash monitor_analysis.sh
+
+# 方法 2：直接 tail 最新 batch 日志
+tail -f $(ls -1t results/*-batch.log | head -1)
+
+# 方法 3：手动指定日志文件
+bash monitor_analysis.sh /root/Palm/TLSHunter/results/20260502-154529-batch.log
+```
+
+### 9.7 检查 Batch 运行结果
+
+#### 查看服务器上已完成的 batch 运行（`--db data/fingerprints.db`）
+
+```bash
+# 查看 batch_jobs 表中的所有 run
+sqlite3 data/fingerprints.db "
+SELECT run_id, COUNT(*) total,
+       SUM(status='done') done,
+       SUM(status='failed') failed,
+       SUM(status='skipped') skipped,
+       MIN(started_at), MAX(finished_at)
+FROM batch_jobs
+GROUP BY run_id
+ORDER BY MAX(COALESCE(started_at, finished_at, '')) DESC
+LIMIT 5;"
+
+# 查看某个 RUN_ID 的进度和方法分布
+RUN_ID='填这里'
+
+sqlite3 data/fingerprints.db "
+SELECT status, method, COUNT(*) count,
+       ROUND(SUM(COALESCE(method_duration_sec,0))/60.0, 2) minutes
+FROM batch_jobs
+WHERE run_id='$RUN_ID'
+GROUP BY status, method
+ORDER BY status, method;"
+
+# 查看每个版本的详情
+sqlite3 data/fingerprints.db "
+SELECT id, version, status, method, started_at, finished_at,
+       method_duration_sec, relocate_max_outlier_delta, error_msg
+FROM batch_jobs
+WHERE run_id='$RUN_ID'
+ORDER BY id DESC
+LIMIT 30;"
+
+# 查看失败项
+sqlite3 data/fingerprints.db "
+SELECT version, status, method, error_msg
+FROM batch_jobs
+WHERE run_id='$RUN_ID' AND status='failed'
+ORDER BY id;"
+
+# 查看 DB 中已入库的版本和 hook 数量
+sqlite3 data/fingerprints.db "
+SELECT b.name, v.version, v.platform, v.arch, v.verified,
+       COUNT(hp.id) as hooks
+FROM versions v
+JOIN browsers b ON b.id = v.browser_id
+LEFT JOIN hook_points hp ON hp.version_id = v.id
+GROUP BY v.id
+ORDER BY v.version;"
+
+# 查看 relocate JSON 文件（batch 自动保存的审查文件）
+ls -lh data/relocate/
+```
+
+#### 如果 batch 中断，用 `--resume` 继续
+
+```bash
+tshunter batch -- --resume "$RUN_ID" --browser chrome --binaries-dir binaries/Chrome --platform linux --arch x86_64 --db data/fingerprints.db --cleanup-binary
+```
+
+---
+
+## 10. 部署与 Batch 运行完整流程
+
+### 10.1 Docker 镜像构建
+
+TLSHunter 使用 Docker 容器运行 Ghidra 静态分析。镜像需要在运行 batch 的机器上构建。
+
+```bash
+# 进入项目根目录
+cd /home/palm/TLSHunter        # 本机
+# cd /root/Palm/TLSHunter      # 服务器
+
+# 构建镜像（首次或代码更新后必须执行）
+docker build -t tlshunter:0.6.0 -f docker/Dockerfile .
+
+# 验证镜像
+docker images | grep tlshunter
+# 预期输出: tlshunter   0.6.0   ...   ...
+```
+
+> **重要**：每次更新 `ghidra_scripts/` 下的 Java 文件后，必须重新构建镜像，否则容器内运行的仍是旧版分析脚本。
+
+### 10.2 本机环境（指定版本 batch）
+
+本机虚拟环境：`fritap-env`，只 batch 指定的两个版本。
+
+```bash
+# 激活虚拟环境
+source ~/fritap-env/bin/activate
+
+# 进入项目目录
+cd /home/palm/TLSHunter
+
+# 确认 Docker 镜像已构建
+docker images | grep tlshunter:0.6.0
+
+# 创建版本清单（只包含要分析的两个版本）
+cat > chrome_versions_local.txt << 'EOF'
+143.0.7499.192
+143.0.7499.169
+EOF
+
+# dry-run 验证
+tshunter batch -- --browser chrome --versions-file chrome_versions_local.txt --binaries-dir binaries/Chrome --platform linux --arch x86_64 --db data/fingerprints.db --dry-run
+
+# 正式运行（前台，可观察 Ghidra 实时输出）
+tshunter batch -- --browser chrome --versions-file chrome_versions_local.txt --binaries-dir binaries/Chrome --platform linux --arch x86_64 --db data/fingerprints.db --cleanup-binary
+
+# 或后台运行
+nohup bash run_batch.sh > logs/batch_$(date +%Y%m%d_%H%M%S).log 2>&1 &
+```
+
+### 10.3 服务器环境（全量 batch）
+
+服务器虚拟环境：`palm`，全量 batch 所有已下载版本。
+
+```bash
+# 激活虚拟环境
+source ~/palm/bin/activate
+
+# 进入项目目录
+cd /root/Palm/TLSHunter
+
+# 确认 Docker 镜像已构建
+docker images | grep tlshunter:0.6.0
+
+# 停止旧容器（如果还在运行）
+docker ps | grep tlshunter
+# docker stop <旧容器名>
+
+# dry-run 验证版本发现
+tshunter batch -- --browser chrome --binaries-dir binaries/Chrome --platform linux --arch x86_64 --dry-run
+
+# 正式运行（后台）
+nohup bash run_batch.sh > logs/batch_$(date +%Y%m%d_%H%M%S).log 2>&1 &
+
+# 观察 Ghidra 实时输出
+tail -f $(ls -1t results/*-batch.log | head -1)
+
+# 或用 monitor 脚本
+bash monitor_analysis.sh
+```
+
+### 10.4 Batch 流程说明
+
+每个版本的处理流程：
+
+```
+DB hit（已有 hook_points）→ 跳过，0.0s
+     ↓ DB miss
+Relocate scan → 写 JSON 到 data/relocate/（审查用，不入库）
+     ↓
+Full Ghidra 分析（~17h/个，Docker 容器内运行）
+     ↓
+Ingest 入 DB + 标记 verified=1
+     ↓
+后续同 milestone 版本可使用此版本作为 relocate baseline（分钟级）
+```
+
+**关键点**：
+- 第一个版本需要完整 Ghidra 分析（~17h），完成后自动标记 `verified=1`
+- 后续同 milestone 版本通过 relocate 定位（分钟级），大幅缩短总耗时
+- Relocate 结果保存为 JSON 供审查，不直接入 DB
+- 只有完整 Ghidra 分析的结果才写入 `fingerprints.db`
+
+### 10.5 检查运行状态
+
+```bash
+# 查看最新 batch run 的汇总
+sqlite3 data/fingerprints.db "
+SELECT run_id, COUNT(*) total,
+       SUM(status='done') done,
+       SUM(status='failed') failed,
+       SUM(status='skipped') skipped,
+       MIN(started_at), MAX(finished_at)
+FROM batch_jobs
+GROUP BY run_id
+ORDER BY MAX(COALESCE(started_at, finished_at, '')) DESC
+LIMIT 5;"
+
+# 查看某个 run 的详情
+sqlite3 data/fingerprints.db "
+SELECT id, version, status, method, method_duration_sec, error_msg
+FROM batch_jobs WHERE run_id='YOUR_RUN_ID'
+ORDER BY id;"
+
+# 查看 DB 中已入库的版本和 hook 数量
+sqlite3 data/fingerprints.db "
+SELECT b.name, v.version, v.verified, COUNT(hp.id) as hooks
+FROM versions v
+JOIN browsers b ON b.id = v.browser_id
+LEFT JOIN hook_points hp ON hp.version_id = v.id
+GROUP BY v.id ORDER BY v.version;"
+```

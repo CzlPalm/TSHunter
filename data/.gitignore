@@ -1,2 +1,6 @@
 # Runtime databases
-data/fingerprints.db
+*.db
+*.db.bak
+
+# Relocate scan JSON (review artifacts, not committed)
+relocate/*.json

@@ -36,7 +36,7 @@ def ensure_relocate_columns(conn):
     additions = [
         ("derived_from_version_id", "ALTER TABLE hook_points ADD COLUMN derived_from_version_id INTEGER REFERENCES versions(id)"),
         ("rva_delta", "ALTER TABLE hook_points ADD COLUMN rva_delta INTEGER DEFAULT NULL"),
-        ("relocation_method", "ALTER TABLE hook_points ADD COLUMN relocation_method TEXT DEFAULT 'ghidra_full' CHECK(relocation_method IN ('ghidra_full','exact_scan','manual','imported'))"),
+        ("relocation_method", "ALTER TABLE hook_points ADD COLUMN relocation_method TEXT DEFAULT 'ghidra_full' CHECK(relocation_method IN ('ghidra_full','exact_scan','exact_scan_partial','manual','imported'))"),
         ("relocation_confidence", "ALTER TABLE hook_points ADD COLUMN relocation_confidence REAL DEFAULT NULL"),
     ]
     for column, sql in additions:
@@ -46,20 +46,8 @@ def ensure_relocate_columns(conn):
 
 
 def ensure_schema(conn, schema_path: Path):
-    conn.executescript(schema_path.read_text(encoding="utf-8"))
-    ensure_migrations_table(conn)
-    if MIGRATIONS_DIR.exists():
-        for path in sorted(MIGRATIONS_DIR.glob("*.sql")):
-            version = path.stem
-            row = conn.execute("SELECT 1 FROM schema_migrations WHERE version=?", (version,)).fetchone()
-            if row:
-                continue
-            conn.executescript(path.read_text(encoding="utf-8"))
-            ensure_relocate_columns(conn)
-            conn.execute("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (?, datetime('now'))", (version,))
-    else:
-        ensure_relocate_columns(conn)
-    conn.commit()
+    from tshunter import ingest as ingest_mod
+    ingest_mod.apply_schema(conn, schema_path)
 
 
 def rows_to_dicts(rows):
@@ -188,4 +176,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

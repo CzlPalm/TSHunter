@@ -8,8 +8,20 @@ from . import analyze as analyze_mod
 from . import batch as batch_mod
 from . import ingest as ingest_mod
 from . import query as query_mod
+from .agent.cli import main as agent_main
 
 ROOT = Path(__file__).resolve().parents[1]
+FORWARDING_COMMANDS = {
+    'analyze',
+    'capture',
+    'ingest',
+    'query',
+    'relocate',
+    'merge',
+    'download',
+    'batch',
+    'agent',
+}
 
 
 CLI_OVERVIEW = (
@@ -129,10 +141,28 @@ def build_parser():
         epilog='Example: tshunter batch -- --browser chrome --binaries-dir binaries/Chrome',
         runner=lambda args: batch_mod.main(args.forward),
     )
+
+    _add_forwarding_subparser(
+        sub,
+        'agent',
+        help_text='Agent automation: source polling, download, task orchestration',
+        description='TSHunter Agent: browser version monitoring, download, and task management.',
+        epilog='Example: tshunter agent -- source poll --browser chrome',
+        runner=lambda args: agent_main(_strip_forward_separator(args.forward)),
+    )
     return parser
 
 
 def main(argv=None):
+    if argv is None:
+        argv = sys.argv[1:]
+    argv = list(argv)
+    if (
+        len(argv) > 1
+        and argv[0] in FORWARDING_COMMANDS
+        and argv[1] not in ('--', '--help', '-h')
+    ):
+        argv = [argv[0], '--', *argv[1:]]
     parser = build_parser()
     args = parser.parse_args(argv)
     return args.func(args)

@@ -54,6 +54,23 @@ def test_forwarded_help_with_separator_succeeds():
         assert 'usage:' in result.stdout.lower()
 
 
+def test_forwarded_options_without_separator_reach_download(monkeypatch):
+    from tshunter import cli
+
+    seen = {}
+
+    def fake_download_runner(path, forward_args):
+        seen['path'] = path
+        seen['forward_args'] = forward_args
+
+    monkeypatch.setattr(cli, '_run_script', fake_download_runner)
+
+    rc = cli.main(['download', '--source', 'cft-all', '--milestones', '143', '--list'])
+
+    assert rc is None
+    assert seen['forward_args'] == ['--', '--source', 'cft-all', '--milestones', '143', '--list']
+
+
 def test_batch_empty_binaries_dir_exits_nonzero(tmp_path):
     result = subprocess.run(
         [sys.executable, '-m', 'tshunter.cli', 'batch',
@@ -83,5 +100,3 @@ def test_no_args_errors_with_usage():
 def test_unknown_subcommand_errors():
     result = _run('not-a-real-cmd')
     assert result.returncode != 0
-
-

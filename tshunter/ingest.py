@@ -33,13 +33,69 @@ def ensure_relocate_columns(conn):
     additions = [
         ("derived_from_version_id", "ALTER TABLE hook_points ADD COLUMN derived_from_version_id INTEGER REFERENCES versions(id)"),
         ("rva_delta", "ALTER TABLE hook_points ADD COLUMN rva_delta INTEGER DEFAULT NULL"),
-        ("relocation_method", "ALTER TABLE hook_points ADD COLUMN relocation_method TEXT DEFAULT 'ghidra_full' CHECK(relocation_method IN ('ghidra_full','exact_scan','manual','imported'))"),
+        ("relocation_method", "ALTER TABLE hook_points ADD COLUMN relocation_method TEXT DEFAULT 'ghidra_full' CHECK(relocation_method IN ('ghidra_full','exact_scan','exact_scan_partial','manual','imported'))"),
         ("relocation_confidence", "ALTER TABLE hook_points ADD COLUMN relocation_confidence REAL DEFAULT NULL"),
     ]
     for column, sql in additions:
         if not column_exists(conn, "hook_points", column):
             conn.execute(sql)
+    ensure_partial_relocate_constraint(conn)
     conn.execute("CREATE INDEX IF NOT EXISTS idx_hook_derived_from ON hook_points(derived_from_version_id)")
+
+
+def ensure_partial_relocate_constraint(conn):
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='hook_points'"
+    ).fetchone()
+    table_sql = row[0] if row else ""
+    if "exact_scan_partial" in table_sql:
+        return
+    conn.execute("PRAGMA foreign_keys=OFF")
+    conn.executescript("""
+        CREATE TABLE hook_points_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            version_id INTEGER NOT NULL,
+            kind TEXT NOT NULL CHECK(kind IN ('prf','key_expansion','hkdf','ssl_log_secret')),
+            function_name TEXT,
+            rva TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            fingerprint_len INTEGER NOT NULL,
+            fingerprint_prefix20 TEXT NOT NULL,
+            role TEXT,
+            params_json TEXT,
+            source TEXT,
+            verified INTEGER DEFAULT 0,
+            derived_from_version_id INTEGER REFERENCES versions(id),
+            rva_delta INTEGER DEFAULT NULL,
+            relocation_method TEXT DEFAULT 'ghidra_full'
+                CHECK(relocation_method IN ('ghidra_full','exact_scan','exact_scan_partial','manual','imported')),
+            relocation_confidence REAL DEFAULT NULL,
+            read_on TEXT DEFAULT 'onLeave',
+            output_len INTEGER DEFAULT NULL,
+            ghidra_name TEXT DEFAULT NULL,
+            note TEXT DEFAULT NULL,
+            UNIQUE(version_id, kind),
+            FOREIGN KEY (version_id) REFERENCES versions(id) ON DELETE CASCADE
+        );
+        INSERT INTO hook_points_new(
+            id, version_id, kind, function_name, rva, fingerprint, fingerprint_len,
+            fingerprint_prefix20, role, params_json, source, verified,
+            derived_from_version_id, rva_delta, relocation_method, relocation_confidence,
+            read_on, output_len, ghidra_name, note
+        )
+        SELECT
+            id, version_id, kind, function_name, rva, fingerprint, fingerprint_len,
+            fingerprint_prefix20, role, params_json, source, verified,
+            derived_from_version_id, rva_delta, relocation_method, relocation_confidence,
+            read_on, output_len, ghidra_name, note
+        FROM hook_points;
+        DROP TABLE hook_points;
+        ALTER TABLE hook_points_new RENAME TO hook_points;
+        CREATE INDEX IF NOT EXISTS idx_hook_fp_prefix ON hook_points(fingerprint_prefix20);
+        CREATE INDEX IF NOT EXISTS idx_hook_kind ON hook_points(kind);
+        CREATE INDEX IF NOT EXISTS idx_hook_derived_from ON hook_points(derived_from_version_id);
+    """)
+    conn.execute("PRAGMA foreign_keys=ON")
 
 
 def ensure_analyzer_runs_status_column(conn):
@@ -63,10 +119,19 @@ def ensure_three_layer_columns(conn):
     conn.execute("CREATE INDEX IF NOT EXISTS idx_versions_profile_ref ON versions(profile_ref)")
 
 
+def ensure_batch_metrics_columns(conn):
+    if not column_exists(conn, "batch_jobs", "method_duration_sec"):
+        conn.execute("ALTER TABLE batch_jobs ADD COLUMN method_duration_sec REAL")
+    if not column_exists(conn, "batch_jobs", "relocate_max_outlier_delta"):
+        conn.execute("ALTER TABLE batch_jobs ADD COLUMN relocate_max_outlier_delta INTEGER")
+
+
 MIGRATION_SIGNATURES = {
     "001_relocate_fields": ("hook_points", "derived_from_version_id"),
     "002_analyzer_runs_status": ("analyzer_runs", "status"),
     "003_three_layer": ("versions", "profile_ref"),
+    "005_partial_relocate": ("hook_points", "relocation_method"),
+    "006_batch_metrics": ("batch_jobs", "method_duration_sec"),
 }
 
 
@@ -85,6 +150,8 @@ def apply_schema(conn, schema: Path):
     ensure_relocate_columns(conn)
     ensure_analyzer_runs_status_column(conn)
     ensure_three_layer_columns(conn)
+    if column_exists(conn, "batch_jobs", "id"):
+        ensure_batch_metrics_columns(conn)
     if not MIGRATIONS_DIR.exists():
         conn.commit()
         return
@@ -102,6 +169,8 @@ def apply_schema(conn, schema: Path):
         ensure_relocate_columns(conn)
         ensure_analyzer_runs_status_column(conn)
         ensure_three_layer_columns(conn)
+        if column_exists(conn, "batch_jobs", "id"):
+            ensure_batch_metrics_columns(conn)
         _mark_migration(conn, version)
     conn.commit()
 
@@ -298,6 +367,8 @@ def ingest_relocate_payload(conn, payload: dict, args):
         raise SystemExit("[FATAL] Refusing to ingest relocate result with zero relocated hooks")
     target = payload.get("target", {})
     source = payload.get("source_version", {})
+    relocation_method = getattr(args, "relocation_method", None) or "exact_scan"
+    note_payload = getattr(args, "note", None)
 
     # Inherit tls_lib + profile_ref from the baseline so relocated versions keep
     # their runtime template association instead of being orphaned.
@@ -323,7 +394,7 @@ def ingest_relocate_payload(conn, payload: dict, args):
         "analysis_date": datetime.now(timezone.utc).isoformat(),
         "analyzer_version": payload.get("tool_version"),
         "verified": 0,
-        "note": f"relocated from {source.get('version')}",
+        "note": json.dumps(note_payload, ensure_ascii=False) if note_payload else f"relocated from {source.get('version')}",
     }
     if source_meta:
         if source_meta["tls_lib"]:
@@ -349,7 +420,18 @@ def ingest_relocate_payload(conn, payload: dict, args):
             "role": source_row["role"],
             "source": "relocate",
         }
-        upsert_hook(conn, version_id, kind, hook_item, args.upsert, source_override="relocate", relocation_method="exact_scan", derived_from_version_id=derived_from_version_id, rva_delta=int(item["delta"], 16) if item.get("delta") else None, relocation_confidence=item.get("confidence"))
+        upsert_hook(
+            conn,
+            version_id,
+            kind,
+            hook_item,
+            args.upsert,
+            source_override="relocate",
+            relocation_method=relocation_method,
+            derived_from_version_id=derived_from_version_id,
+            rva_delta=int(item["delta"], 16) if item.get("delta") else None,
+            relocation_confidence=item.get("confidence"),
+        )
 
 
 def maybe_seed(conn, seed: Path, args):
@@ -422,4 +504,3 @@ def main(argv=None):
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
